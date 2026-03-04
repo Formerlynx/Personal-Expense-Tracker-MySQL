@@ -631,5 +631,5 @@ if __name__ == '__main__':
     print("Open your browser and navigate to: http://127.0.0.1:5000")
     print("Press Ctrl+C to stop the server")
     print("=" * 60)
-    
+    # Minor update for contribution tracking
     app.run(debug=False, host='127.0.0.1', port=5000)
