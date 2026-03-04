@@ -450,15 +450,15 @@ Contributions are welcome! Here's how to contribute:
 
 1. **Fork the repository**
 2. **Create a feature branch**
-   ```bash
+   ```
    git checkout -b feature/AmazingFeature
    ```
 3. **Commit your changes**
-   ```bash
+   ```
    git commit -m 'Add some AmazingFeature'
    ```
 4. **Push to the branch**
-   ```bash
+   ```
    git push origin feature/AmazingFeature
    ```
 5. **Open a Pull Request**
@@ -482,6 +482,7 @@ Contributions are welcome! Here's how to contribute:
 - [ ] Expense search and filtering
 - [ ] Recurring expenses
 - [ ] Category icons
+- [ ] Happy for more ideas
 
 ---
 
@@ -517,9 +518,9 @@ SOFTWARE.
 
 ## 👨‍💻 Author
 
-**[Your Name]**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Email: your.email@example.com
+**[Verghese Keenalil]**
+- GitHub: [@Formerlynx](https://github.com/Formerlynx)
+- Email: verghese.keenalil@gmail.com
 
 ---
 
@@ -536,27 +537,9 @@ SOFTWARE.
 
 If you encounter any issues or have questions:
 
-1. Check the [Troubleshooting](#troubleshooting) section
-2. Review [Known Issues](#known-issues--fixes)
-3. Open an issue on GitHub
-4. Contact: your.email@example.com
-
----
-
-## 🗺️ Roadmap
-
-### Version 2.0 (Planned)
-- [ ] SQLite database option
-- [ ] Export functionality (Excel, CSV, PDF)
-- [ ] Budget tracking and alerts
-- [ ] Receipt scanning/upload
-- [ ] Mobile app version
-
-### Version 2.1 (Future)
-- [ ] Multi-user household accounts
-- [ ] Shared expenses tracking
-- [ ] Cloud sync option
-- [ ] API for third-party integrations
+1. Open an issue on GitHub
+2. Contact: verghese.keenalil@gmail.com
+3. Keep in mind might take a bit of time, still in school and is new to git
 
 ---
 
