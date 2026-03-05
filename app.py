@@ -168,7 +168,14 @@ def login():
             session['username'] = username
             
             # Derive encryption key from password
-            salt = base64.b64decode(user[2])
+            # Handle legacy users who might not have a salt yet
+            if user[2] and user[2].strip():
+                salt = base64.b64decode(user[2])
+            else:
+                # Generate salt from username+password for legacy users
+                import hashlib
+                salt = hashlib.sha256((username + password).encode()).digest()[:32]
+            
             encryption_key = EncryptionManager.derive_key(password, salt)
             session['encryption_key'] = base64.b64encode(encryption_key).decode()
             
