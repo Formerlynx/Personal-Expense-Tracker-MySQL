@@ -9,7 +9,7 @@
         <a href="{{ url_for('add_expense') }}" class="btn btn-success"> Add New Expense</a>
     </div>
     
-    {% if expenses %}
+    {% if grouped_expenses %}
     <div style="background: #1a1a1a; border-radius: 10px; overflow: hidden; border: 1px solid #333;">
         <div class="table-responsive">
             <table class="table table-dark table-hover mb-0">
@@ -22,7 +22,17 @@
                     </tr>
                 </thead>
                 <tbody id="expenses-table">
-                    {% for expense in expenses %}
+                    {% for year_month, month_expenses in grouped_expenses %}
+                    <tr style="background-color: #2a2a2a;">
+                        <td colspan="4" style="padding: 1rem; font-weight: bold; color: #667eea;">
+                            {% if year_month != "Unknown" %}
+                                {{ year_month[:4] }}-{{ year_month[5:] }} ({{ month_expenses|length }} expense{{ "s" if month_expenses|length != 1 else "" }})
+                            {% else %}
+                                Unknown Dates ({{ month_expenses|length }} expense{{ "s" if month_expenses|length != 1 else "" }})
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% for expense in month_expenses %}
                     <tr id="expense-{{ expense.id }}" style="border-color: #333;">
                         <td style="padding: 1rem;"><strong>{{ expense.date }}</strong></td>
                         <td style="padding: 1rem;"><span class="category-tag">{{ expense.category }}</span></td>
@@ -33,13 +43,14 @@
                         </td>
                     </tr>
                     {% endfor %}
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
     
     <div style="margin-top: 1rem; padding: 1rem; background: #1a1a1a; border-radius: 10px; border: 1px solid #333; text-align: center;">
-        <p class="text-muted mb-0">Total expenses shown: <strong>{{ expenses|length }}</strong></p>
+        <p class="text-muted mb-0">Total expenses shown: <strong>{% set total_count = 0 %}{% for year_month, month_expenses in grouped_expenses %}{% set total_count = total_count + month_expenses|length %}{% endfor %}{{ total_count }}</strong></p>
     </div>
     
     {% else %}

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from collections import defaultdict
+import textwrap
 import os
 import sys
 import pyodbc
@@ -14,6 +15,7 @@ import secrets
 import threading
 import webbrowser
 import logging
+import textwrap
 from flask_bcrypt import Bcrypt
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -191,12 +193,32 @@ tray_icon = None
 
 def get_db_connection():
     db_password = 'password'
-    conn_str = (
-        r"DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};"
-        f"DBQ={DB_PATH};"
-        f"PWD={db_password};"
-    )
-    return pyodbc.connect(conn_str)
+    
+    # Try different connection methods
+    conn_str_options = [
+        # Try without password first
+        r"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={DB_PATH}",
+        # Try with password
+        r"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={DB_PATH};PWD={db_password}",
+        # Try alternative driver name
+        r"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={DB_PATH}",
+        # Try with password for OLEDB
+        r"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={DB_PATH};Jet OLEDB:Database Password={db_password}",
+    ]
+    
+    for conn_str_template in conn_str_options:
+        try:
+            conn_str = conn_str_template.format(DB_PATH=DB_PATH, db_password=db_password)
+            logger.debug(f"Trying connection: {conn_str}")
+            conn = pyodbc.connect(conn_str)
+            logger.info("Database connection successful")
+            return conn
+        except pyodbc.Error as e:
+            logger.warning(f"Connection failed: {conn_str} - {str(e)}")
+            continue
+    
+    # If all fail, raise the last error
+    raise pyodbc.Error("Failed to connect to database. Please ensure Microsoft Access Database Engine is installed.")
 
 def is_logged_in():
     return 'user_id' in session and 'encryption_key' in session
@@ -338,7 +360,7 @@ def view_expenses():
     
     encryption_key = base64.b64decode(session['encryption_key'])
 
-    cursor.execute("SELECT id, expense_date, category, amount FROM expenses WHERE user_id = ?", 
+    cursor.execute("SELECT id, expense_date, category, amount FROM expenses WHERE user_id = ? ORDER BY expense_date DESC", 
                    (session['user_id'],))
     rows = cursor.fetchall()
 
@@ -355,9 +377,21 @@ def view_expenses():
             except:
                 amount_formatted = amount_str
             
+            # Parse date for sorting and grouping
+            try:
+                parsed_date = datetime.strptime(date_str, "%d-%m-%Y")
+                year_month = parsed_date.strftime("%Y-%m")
+                display_date = parsed_date.strftime("%d-%m-%Y")
+            except:
+                parsed_date = None
+                year_month = "Unknown"
+                display_date = date_str
+            
             expenses.append({
                 'id': row[0], 
-                'date': date_str, 
+                'date': display_date, 
+                'parsed_date': parsed_date,
+                'year_month': year_month,
                 'category': category_str, 
                 'amount': amount_formatted
             })
@@ -365,7 +399,17 @@ def view_expenses():
             continue
 
     conn.close()
-    return render_template('view.html', expenses=expenses)
+    
+    # Group expenses by year-month
+    from collections import defaultdict
+    grouped_expenses = defaultdict(list)
+    for exp in expenses:
+        grouped_expenses[exp['year_month']].append(exp)
+    
+    # Sort groups by year-month descending
+    sorted_groups = sorted(grouped_expenses.items(), key=lambda x: x[0], reverse=True)
+    
+    return render_template('view.html', grouped_expenses=sorted_groups)
 
 @app.route('/analyze')
 def analyze_expenses():
@@ -503,11 +547,15 @@ def analyze_expenses():
     try:
         if pie_categories and sum(pie_amounts) > 0:
             plt.figure(figsize=(6, 6))
-            plt.pie(pie_amounts, labels=pie_categories, autopct='%1.1f%%', 
-                   startangle=140, textprops={'color': 'white'})
+            colors = plt.cm.tab10.colors[:len(pie_categories)]
+            wedges, texts, autotexts = plt.pie(pie_amounts, labels=pie_categories, autopct='%1.1f%%', 
+                   startangle=140, colors=colors, textprops={'color': 'white'})
             plt.title('Current Month Breakdown', color='white')
             plt.gca().set_facecolor('#121212')
             plt.gcf().set_facecolor('#121212')
+            # Color the labels to match their slice colors
+            for i, text in enumerate(texts):
+                text.set_color(colors[i % len(colors)])
             pie_file = os.path.join(static_path, 'chart.png')
             plt.savefig(pie_file, dpi=300, bbox_inches='tight')
             plt.close()
@@ -523,7 +571,9 @@ def analyze_expenses():
             plt.ylabel('Amount', color='white')
             plt.gca().set_facecolor('#121212')
             plt.gcf().set_facecolor('#121212')
-            plt.xticks(color='white')
+            # Wrap long category names at spaces
+            wrapped_labels = [textwrap.fill(cat, width=12, break_long_words=False) for cat in bar_categories]
+            plt.xticks(range(len(bar_categories)), wrapped_labels, rotation=0, color='white', ha='center')
             plt.yticks(color='white')
             bar_chart_file = os.path.join(static_path, 'bar_chart.png')
             plt.savefig(bar_chart_file, dpi=300, bbox_inches='tight')
