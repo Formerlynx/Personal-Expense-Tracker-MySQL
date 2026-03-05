@@ -3,43 +3,80 @@
 {% block title %}Add Expense - Expense Tracker{% endblock %}
 
 {% block content %}
-<h1 class="mb-4">Add Expense</h1>
-<form method="POST" class="row g-3">
-    <div class="col-md-6">
-        <label for="date" class="form-label">Date</label>
-        <input type="date" name="date" id="date" class="form-control" required>
+<div style="max-width: 600px; margin: 0 auto;">
+    <h1 class="mb-4"> Add Expense</h1>
+    
+    <div style="background: #1a1a1a; padding: 2rem; border-radius: 10px; border: 1px solid #333;">
+        <form method="POST" class="row g-3">
+            <div class="col-md-6">
+                <label for="date" class="form-label"> Date</label>
+                <input type="date" name="date" id="date" class="form-control" required>
+                <small class="text-muted">When did this expense occur?</small>
+            </div>
+            
+            <div class="col-md-6">
+                <label for="category" class="form-label"> Category</label>
+                <select name="category" id="category" class="form-select" required>
+                    <option value="">-- Select a Category --</option>
+                    {% for category in categories %}
+                        <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                    <option value="add_new"> Add New Category</option>
+                </select>
+            </div>
+            
+            <div class="col-md-6" id="new-category-container" style="display: none;">
+                <label for="new_category" class="form-label"> New Category Name</label>
+                <input type="text" name="new_category" id="new_category" class="form-control" placeholder="e.g., Travel, Entertainment">
+            </div>
+            
+            <div class="col-md-6">
+                <label for="amount" class="form-label"> Amount</label>
+                <input type="number" name="amount" id="amount" step="0.01" class="form-control" placeholder="0.00" required>
+                <small class="text-muted">Decimal amounts supported (e.g., 10.50)</small>
+            </div>
+            
+            <div class="col-12">
+                <button type="submit" class="btn btn-success btn-lg"> Add Expense</button>
+                <a href="{{ url_for('view_expenses') }}" class="btn btn-secondary btn-lg">⬅ Back</a>
+            </div>
+        </form>
     </div>
-    <div class="col-md-6">
-        <label for="category" class="form-label">Category</label>
-        <select name="category" id="category" class="form-select">
-            <option value="">-- Select a Category --</option>
-            {% for category in categories %}
-                <option value="{{ category }}">{{ category }}</option>
-            {% endfor %}
-            <option value="add_new">-- Add New Category --</option>
-        </select>
-    </div>
-    <div class="col-md-6" id="new-category-container" style="display: none;">
-        <label for="new_category" class="form-label">New Category</label>
-        <input type="text" name="new_category" id="new_category" class="form-control">
-    </div>
-    <div class="col-md-6">
-        <label for="amount" class="form-label">Amount</label>
-        <input type="number" name="amount" id="amount" step="0.001" class="form-control" required>
-    </div>
-    <div class="col-12">
-        <button type="submit" class="btn btn-primary">Add Expense</button>
-    </div>
-</form>
+</div>
 
 <script>
+    // Show/hide new category input based on selection
     document.getElementById('category').addEventListener('change', function () {
         const newCategoryContainer = document.getElementById('new-category-container');
+        const newCategoryInput = document.getElementById('new_category');
+        
         if (this.value === 'add_new') {
             newCategoryContainer.style.display = 'block';
+            newCategoryInput.focus();
         } else {
             newCategoryContainer.style.display = 'none';
+            newCategoryInput.value = '';
         }
     });
+    
+    // Set today's date as default
+    document.addEventListener('DOMContentLoaded', function () {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('date').value = today;
+    });
 </script>
+
+<style>
+    .form-control, .form-select {
+        background-color: #2a2a2a;
+        border: 1px solid #333;
+        color: #e0e0e0;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        background-color: #333;
+        border-color: #667eea;
+        color: #e0e0e0;
+    }
+</style>
 {% endblock %}

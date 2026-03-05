@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 import matplotlib
-matplotlib.use('Agg')  # Use non-GUI backend for executables
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
@@ -11,11 +11,25 @@ import pyodbc
 import shutil
 import base64
 import secrets
+import threading
+import webbrowser
+import logging
 from flask_bcrypt import Bcrypt
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
+
+# Import system tray dependencies
+try:
+    import pystray
+    from pystray import MenuItem as item
+    from PIL import Image, ImageDraw
+    import tkinter as tk
+    from tkinter import messagebox
+    TRAY_AVAILABLE = True
+except ImportError:
+    TRAY_AVAILABLE = False
 
 # Configure paths for PyInstaller
 def get_base_path():
@@ -36,6 +50,58 @@ def get_user_data_path():
         os.makedirs(base)
     return base
 
+def get_settings_file():
+    """Get path to settings file"""
+    return os.path.join(get_user_data_path(), 'settings.txt')
+
+def is_first_run():
+    """Check if this is the first time running the app"""
+    settings_file = get_settings_file()
+    return not os.path.exists(settings_file)
+
+def save_autostart_preference(enable):
+    """Save user's autostart preference"""
+    settings_file = get_settings_file()
+    with open(settings_file, 'w') as f:
+        f.write(f"autostart={'yes' if enable else 'no'}\n")
+        f.write(f"first_run_done=yes\n")
+
+def should_autostart():
+    """Check if app should start in background"""
+    settings_file = get_settings_file()
+    if not os.path.exists(settings_file):
+        return True  # Default to yes
+    
+    try:
+        with open(settings_file, 'r') as f:
+            for line in f:
+                if line.startswith('autostart='):
+                    return line.strip().split('=')[1] == 'yes'
+    except:
+        pass
+    return True
+
+def show_first_run_dialog():
+    """Show dialog on first run asking about background running"""
+    if not TRAY_AVAILABLE:
+        return True
+    
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+    
+    result = messagebox.askyesno(
+        "Expense Tracker - First Run",
+        "Welcome to Expense Tracker!\n\n"
+        "Would you like this app to run in the background?\n\n"
+        "• YES: App runs in system tray, access anytime via http://127.0.0.1:5000\n"
+        "• NO: App closes when you close the browser\n\n"
+        "You can change this later in settings.",
+        icon='question'
+    )
+    
+    root.destroy()
+    return result
+
 def initialize_database():
     """
     Initialize the database for the application.
@@ -48,9 +114,7 @@ def initialize_database():
         if not os.path.exists(db_path):
             template_db = os.path.join(sys._MEIPASS, 'Database', 'expenses.accdb')
             if os.path.exists(template_db):
-                print(f"First run detected. Creating database at: {db_path}")
                 shutil.copy2(template_db, db_path)
-                print("Database initialized successfully!")
             else:
                 raise FileNotFoundError("Template database not found in executable!")
         
@@ -100,8 +164,21 @@ app = Flask(__name__, template_folder=template_folder, static_folder=static_fold
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
 bcrypt = Bcrypt(app)
 
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Error handler for debugging
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
+    return f"Error: {str(e)}", 500
+
 # Initialize database path
 DB_PATH = initialize_database()
+
+# Global variable for system tray icon
+tray_icon = None
 
 def get_db_connection():
     db_password = 'password'
@@ -128,7 +205,6 @@ def signup():
         password = request.form['password']
         hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
         
-        # Generate unique salt for this user
         salt = secrets.token_bytes(32)
         salt_b64 = base64.b64encode(salt).decode()
 
@@ -167,15 +243,7 @@ def login():
             session['user_id'] = user[0]
             session['username'] = username
             
-            # Derive encryption key from password
-            # Handle legacy users who might not have a salt yet
-            if user[2] and user[2].strip():
-                salt = base64.b64decode(user[2])
-            else:
-                # Generate salt from username+password for legacy users
-                import hashlib
-                salt = hashlib.sha256((username + password).encode()).digest()[:32]
-            
+            salt = base64.b64decode(user[2])
             encryption_key = EncryptionManager.derive_key(password, salt)
             session['encryption_key'] = base64.b64encode(encryption_key).decode()
             
@@ -201,10 +269,8 @@ def add_expense():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get encryption key from session
     encryption_key = base64.b64decode(session['encryption_key'])
 
-    # Fetch and decrypt existing categories
     cursor.execute("SELECT DISTINCT category FROM expenses WHERE user_id = ?", (session['user_id'],))
     encrypted_categories = [row[0] for row in cursor.fetchall()]
     categories = list(set([EncryptionManager.decrypt(cat, encryption_key) for cat in encrypted_categories]))
@@ -225,7 +291,6 @@ def add_expense():
 
         category = new_category if selected_category == 'add_new' else selected_category
         
-        # Validate inputs
         if not category:
             flash("Category cannot be empty.", "danger")
             conn.close()
@@ -236,7 +301,6 @@ def add_expense():
             conn.close()
             return redirect(url_for('add_expense'))
 
-        # Encrypt all expense data
         encrypted_date = EncryptionManager.encrypt(date, encryption_key)
         encrypted_category = EncryptionManager.encrypt(category, encryption_key)
         encrypted_amount = EncryptionManager.encrypt(str(rounded_amount), encryption_key)
@@ -263,7 +327,6 @@ def view_expenses():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get encryption key
     encryption_key = base64.b64decode(session['encryption_key'])
 
     cursor.execute("SELECT id, expense_date, category, amount FROM expenses WHERE user_id = ?", 
@@ -273,12 +336,10 @@ def view_expenses():
     expenses = []
     for row in rows:
         try:
-            # Decrypt expense data
             date_str = EncryptionManager.decrypt(row[1], encryption_key)
             category_str = EncryptionManager.decrypt(row[2], encryption_key)
             amount_str = EncryptionManager.decrypt(row[3], encryption_key)
             
-            # Format amount
             try:
                 amount_val = float(amount_str)
                 amount_formatted = f"{amount_val:.3f}"
@@ -291,8 +352,7 @@ def view_expenses():
                 'category': category_str, 
                 'amount': amount_formatted
             })
-        except Exception as e:
-            print(f"Error decrypting expense {row[0]}: {e}")
+        except Exception:
             continue
 
     conn.close()
@@ -521,15 +581,6 @@ def analyze_expenses():
         yearly_trend=os.path.basename(yearly_trend_file) if yearly_trend_file else None
     )
 
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    if getattr(sys, 'frozen', False):
-        static_path = os.path.join(get_user_data_path(), 'static')
-        from flask import send_from_directory
-        return send_from_directory(static_path, filename)
-    else:
-        return app.send_static_file(filename)
-
 @app.route('/edit/<int:expense_id>', methods=['GET', 'POST'])
 def edit_expense(expense_id):
     if not is_logged_in():
@@ -616,27 +667,132 @@ def delete_expense(expense_id):
 def index():
     return render_template('index.html')
 
-if __name__ == '__main__':
-    if getattr(sys, 'frozen', False):
-        import webbrowser
-        import threading
-        
-        def open_browser():
-            import time
-            time.sleep(1.5)
-            webbrowser.open('http://127.0.0.1:5000')
-        
-        threading.Thread(target=open_browser).start()
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    """Settings page to manage background mode"""
+    if not is_logged_in():
+        flash("Please log in to access settings.", "warning")
+        return redirect(url_for('login'))
     
-    print("=" * 60)
-    print("Expense Tracker Starting...")
-    print("=" * 60)
+    current_setting = should_autostart()
+    
+    if request.method == 'POST':
+        enable_background = request.form.get('background_mode') == 'yes'
+        save_autostart_preference(enable_background)
+        
+        if enable_background:
+            flash("Background mode enabled! App will run in system tray.", "success")
+        else:
+            flash("Background mode disabled. App will close when you close the browser.", "info")
+        
+        return redirect(url_for('settings'))
+    
+    return render_template('settings.html', background_enabled=current_setting)
+
+# System Tray Functions
+def create_image():
+    """Create a simple icon for the system tray"""
+    # Create a 64x64 icon with a dollar sign
+    image = Image.new('RGB', (64, 64), color=(0, 120, 215))
+    dc = ImageDraw.Draw(image)
+    dc.text((20, 15), "$", fill=(255, 255, 255), font=None)
+    return image
+
+def open_app(icon, item):
+    """Open the app in browser"""
+    webbrowser.open('http://127.0.0.1:5000')
+
+def quit_app(icon, item):
+    """Quit the application"""
+    icon.stop()
+    os._exit(0)
+
+def setup_system_tray():
+    """Setup system tray icon with menu"""
+    global tray_icon
+    
+    if not TRAY_AVAILABLE:
+        return
+    
+    # Create icon
+    icon_image = create_image()
+    
+    # Create menu
+    menu = (
+        item('Open Expense Tracker', open_app, default=True),
+        item('Quit', quit_app)
+    )
+    
+    # Create tray icon
+    tray_icon = pystray.Icon("ExpenseTracker", icon_image, "Expense Tracker", menu)
+    
+    # Run in separate thread
+    threading.Thread(target=tray_icon.run, daemon=True).start()
+
+# Flask server thread
+def run_flask():
+    """Run Flask server"""
+    app.run(debug=False, host='127.0.0.1', port=5000, use_reloader=False, threaded=True)
+
+if __name__ == '__main__':
+    # Running as executable
     if getattr(sys, 'frozen', False):
+        print("=" * 60)
+        print("Expense Tracker Starting (Executable Mode)...")
+        print("=" * 60)
+        print(f"Base path: {base_path}")
+        print(f"Database path: {DB_PATH}")
+        print(f"Database exists: {os.path.exists(DB_PATH)}")
+        print(f"Template folder: {template_folder}")
+        print(f"Template folder exists: {os.path.exists(template_folder)}")
+        print(f"Static folder: {static_folder}")
+        print(f"Static folder exists: {os.path.exists(static_folder)}")
+        print("=" * 60)
+        
+        # Check first run
+        first_run = is_first_run()
+        
+        if first_run:
+            # Show dialog
+            enable_background = show_first_run_dialog()
+            save_autostart_preference(enable_background)
+        else:
+            enable_background = should_autostart()
+        
+        # Start Flask in background thread
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        
+        # Wait a moment for Flask to start
+        import time
+        time.sleep(2)
+        
+        # Open browser
+        webbrowser.open('http://127.0.0.1:5000')
+        
+        if enable_background:
+            # Setup system tray and keep running
+            if TRAY_AVAILABLE:
+                setup_system_tray()
+                # Keep main thread alive
+                while True:
+                    time.sleep(1)
+            else:
+                # No tray available, just keep Flask running
+                flask_thread.join()
+        else:
+            # Don't run in background, wait for Flask thread
+            flask_thread.join()
+    
+    else:
+        # Running as script (development)
+        print("=" * 60)
+        print("Expense Tracker Starting...")
+        print("=" * 60)
         print(f"Database location: {DB_PATH}")
-        print(f"Your data is safely stored at: {get_user_data_path()}")
-    print("🔒 All expense data is encrypted with AES-256")
-    print("Open your browser and navigate to: http://127.0.0.1:5000")
-    print("Press Ctrl+C to stop the server")
-    print("=" * 60)
-    # Minor update for contribution tracking
-    app.run(debug=False, host='127.0.0.1', port=5000)
+        print("🔒 All expense data is encrypted with AES-256")
+        print("Open your browser: http://127.0.0.1:5000")
+        print("Press Ctrl+C to stop the server")
+        print("=" * 60)
+        
+        app.run(debug=True, host='127.0.0.1', port=5000)

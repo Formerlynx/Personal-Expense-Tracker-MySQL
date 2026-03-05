@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 800px;">
+    <h1 class="mb-4"> Settings</h1>
+
+    <div class="card bg-dark text-white mb-4">
+        <div class="card-header">
+            <h3> Background Mode</h3>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label">How should the app run?</label>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="background_mode" id="background_yes" 
+                               value="yes" {% if background_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="background_yes">
+                            <strong> Run in Background (Recommended)</strong>
+                            <p class="text-muted mb-0 ms-4">
+                                • App stays in system tray (next to clock)<br>
+                                • Access anytime at http://127.0.0.1:5000<br>
+                                • No need to run .exe again<br>
+                                • Perfect for daily use
+                            </p>
+                        </label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="background_mode" id="background_no" 
+                               value="no" {% if not background_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="background_no">
+                            <strong> Normal Mode</strong>
+                            <p class="text-muted mb-0 ms-4">
+                                • App closes when you close browser<br>
+                                • Must run .exe each time<br>
+                                • Uses less system resources<br>
+                                • Good for occasional use
+                            </p>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+
+    <div class="card bg-dark text-white mb-4">
+        <div class="card-header">
+            <h3> Current Status</h3>
+        </div>
+        <div class="card-body">
+            {% if background_enabled %}
+                <div class="alert alert-success">
+                    <strong> Background Mode is ENABLED</strong>
+                    <p class="mb-2">The app is running in the system tray.</p>
+                    <p class="mb-0">
+                        <small>
+                            • Look for the 💙$ icon in the bottom-right corner<br>
+                            • Right-click the icon to open or quit<br>
+                            • Access anytime: <a href="http://127.0.0.1:5000" class="text-white">http://127.0.0.1:5000</a>
+                        </small>
+                    </p>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <strong> Normal Mode is ACTIVE</strong>
+                    <p class="mb-2">The app will close when you close the browser.</p>
+                    <p class="mb-0">
+                        <small>
+                            • You'll need to run ExpenseTracker.exe each time<br>
+                            • App stops when browser is closed<br>
+                            • Uses minimal system resources when not in use
+                        </small>
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card bg-dark text-white mb-4">
+        <div class="card-header">
+            <h3> Quick Actions</h3>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <div class="card bg-secondary">
+                        <div class="card-body">
+                            <h5 class="card-title"> Restart App</h5>
+                            <p class="card-text">
+                                To apply changes, you need to restart the app.
+                            </p>
+                            <button class="btn btn-warning btn-sm" onclick="showRestartInstructions()">
+                                How to Restart
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <div class="card bg-secondary">
+                        <div class="card-body">
+                            <h5 class="card-title"> Access URL</h5>
+                            <p class="card-text">
+                                Bookmark this for quick access:
+                            </p>
+                            <code style="background: #0d0d0d; padding: 5px; display: block;">
+                                http://127.0.0.1:5000
+                            </code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card bg-dark text-white">
+        <div class="card-header">
+            <h3> Need Help?</h3>
+        </div>
+        <div class="card-body">
+            <h5>How to find the system tray icon:</h5>
+            <ol>
+                <li>Look in the bottom-right corner of your screen (near the clock)</li>
+                <li>Click the ^ arrow to show hidden icons</li>
+                <li>Find the 💙$ icon (blue with dollar sign)</li>
+                <li>Right-click it for menu options</li>
+            </ol>
+
+            <h5 class="mt-4">How to quit the app:</h5>
+            <ul>
+                <li><strong>Background Mode:</strong> Right-click system tray icon → Quit</li>
+                <li><strong>Normal Mode:</strong> Just close the browser</li>
+                <li><strong>Alternative:</strong> Open Task Manager (Ctrl+Shift+Esc) → End "ExpenseTracker.exe"</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Restart Instructions Modal (using JS alert for simplicity) -->
+<script>
+function showRestartInstructions() {
+    alert(
+        "How to Restart the App:\n\n" +
+        "Background Mode:\n" +
+        "1. Right-click the 💙$ icon in system tray\n" +
+        "2. Click 'Quit'\n" +
+        "3. Run ExpenseTracker.exe again\n\n" +
+        "Normal Mode:\n" +
+        "1. Close this browser window\n" +
+        "2. Run ExpenseTracker.exe again\n\n" +
+        "Your new settings will take effect!"
+    );
+}
+</script>
+
+<style>
+.card {
+    border: 1px solid #333;
+}
+
+.card-header {
+    background-color: #1a1a1a;
+    border-bottom: 1px solid #333;
+}
+
+.alert {
+    border-radius: 8px;
+}
+
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-label {
+    cursor: pointer;
+}
+
+.text-muted {
+    color: #aaa !important;
+}
+
+code {
+    color: #4CAF50;
+}
+</style>
+{% endblock %}

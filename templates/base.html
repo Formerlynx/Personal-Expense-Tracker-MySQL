@@ -5,32 +5,87 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Expense Tracker{% endblock %}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body {
+            background-color: #0f0f0f;
+            color: #e0e0e0;
+        }
+        
+        header {
+            background-color: #0f0f0f;
+            border-bottom: 1px solid #333;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        }
+        
+        footer {
+            background-color: #0f0f0f;
+            border-top: 1px solid #333;
+            margin-top: auto;
+        }
+        
+        main {
+            min-height: calc(100vh - 200px);
+        }
+        
+        nav {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .btn-outline-light:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+    </style>
 </head>
-<body class="bg-dark text-white">
-    <header class="bg-dark text-white py-3 border-bottom border-secondary">
-        <div class="container d-flex justify-content-between align-items-center">
-            <h1 class="h3">Expense Tracker</h1>
-            <nav>
-                <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">Home</a>
-                {% if session.get('user_id') %}
-                    <a href="{{ url_for('add_expense') }}" class="btn btn-outline-light btn-sm">Add Expense</a>
-                    <a href="{{ url_for('view_expenses') }}" class="btn btn-outline-light btn-sm">View Expenses</a>
-                    <a href="{{ url_for('analyze_expenses') }}" class="btn btn-outline-light btn-sm">Analyze Expenses</a>
-                    <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm">Logout</a>
-                {% else %}
-                    <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-sm">Login</a>
-                    <a href="{{ url_for('signup') }}" class="btn btn-outline-light btn-sm">Signup</a>
-                {% endif %}
+<body class="bg-dark text-white d-flex flex-column" style="min-height: 100vh;">
+    <header class="py-3">
+        <div class="container d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h1 class="h3 mb-0"> Expense Tracker</h1>
+            <nav class="navbar-expand-md">
+                <div class="navbar-nav d-flex gap-2">
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">Home</a>
+                    {% if session.get('user_id') %}
+                        <a href="{{ url_for('add_expense') }}" class="btn btn-outline-light btn-sm"> Add</a>
+                        <a href="{{ url_for('view_expenses') }}" class="btn btn-outline-light btn-sm"> Expenses</a>
+                        <a href="{{ url_for('analyze_expenses') }}" class="btn btn-outline-light btn-sm"> Analytics</a>
+                        <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary btn-sm"> Settings</a>
+                        <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm"> Logout</a>
+                    {% else %}
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-sm"> Login</a>
+                        <a href="{{ url_for('signup') }}" class="btn btn-outline-light btn-sm"> Signup</a>
+                    {% endif %}
+                </div>
             </nav>
         </div>
     </header>
 
-    <main class="container my-4 text-white">
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="container mt-3">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+              <strong>
+                {% if category == 'success' %}{% elif category == 'danger' %}{% elif category == 'warning' %}{% else %}ℹ{% endif %}
+              </strong>
+              {{ message }}
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <main class="container my-4 text-white flex-grow-1">
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-dark text-white text-center py-3 border-top border-secondary">
-        <p>&copy; 2025 Expense Tracker</p>
+    <footer class="py-3 mt-5">
+        <div class="container text-center text-muted">
+            <p class="mb-0">&copy; 2026 Expense Tracker |  AES-256 Encrypted | <a href="{{ url_for('index') }}" style="color: #667eea; text-decoration: none;">Home</a> | <a href="#" style="color: #667eea; text-decoration: none;">Privacy</a></p>
+        </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>

@@ -3,8 +3,86 @@
 {% block title %}Home - Expense Tracker{% endblock %}
 
 {% block content %}
-<div class="text-center">
-    <h1>Welcome to Expense Tracker</h1>
-    <p class="lead">Track your expenses efficiently and gain insights into your spending habits.</p>
+<div style="animation: fadeIn 0.5s ease-in;">
+    <div class="text-center mb-5">
+        <h1 class="display-4 mb-3"> Welcome to Expense Tracker</h1>
+        <p class="lead text-muted">Track your expenses efficiently with military-grade encryption and powerful analytics</p>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+        <!-- Quick Add Card -->
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);">
+            <h3 style="margin: 0 0 0.5rem 0;"> Quick Add</h3>
+            <p style="margin: 0 0 1rem 0; opacity: 0.9;">Track a new expense</p>
+            <a href="{{ url_for('add_expense') }}" class="btn btn-light btn-sm">Add Expense</a>
+        </div>
+
+        <!-- View Expenses Card -->
+        <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);">
+            <h3 style="margin: 0 0 0.5rem 0;"> Your Expenses</h3>
+            <p style="margin: 0 0 1rem 0; opacity: 0.9;">View all tracked expenses</p>
+            <a href="{{ url_for('view_expenses') }}" class="btn btn-light btn-sm">View All</a>
+        </div>
+
+        <!-- Analytics Card -->
+        <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);">
+            <h3 style="margin: 0 0 0.5rem 0;"> Analytics</h3>
+            <p style="margin: 0 0 1rem 0; opacity: 0.9;">Analyze spending patterns</p>
+            <a href="{{ url_for('analyze_expenses') }}" class="btn btn-light btn-sm">View Analytics</a>
+        </div>
+
+        <!-- Settings Card -->
+        <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); padding: 1.5rem; border-radius: 10px; box-shadow: 0 4px 15px rgba(250, 112, 154, 0.3);">
+            <h3 style="margin: 0 0 0.5rem 0;"> Settings</h3>
+            <p style="margin: 0 0 1rem 0; opacity: 0.9;">Manage app preferences</p>
+            <a href="{{ url_for('settings') }}" class="btn btn-light btn-sm">Configure</a>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div style="background: #1a1a1a; padding: 2rem; border-radius: 10px; margin-bottom: 2rem; border: 1px solid #333;">
+        <h2 class="mb-4"> Key Features</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+            <div style="padding: 1rem;">
+                <h5 style="color: #667eea;"> End-to-End Encryption</h5>
+                <p class="text-muted">All your expense data is encrypted with AES-256 encryption. Only you can access your financial information.</p>
+            </div>
+            <div style="padding: 1rem;">
+                <h5 style="color: #f5576c;"> Multi-User Support</h5>
+                <p class="text-muted">Multiple users can use the same application on the same computer with completely isolated data.</p>
+            </div>
+            <div style="padding: 1rem;">
+                <h5 style="color: #00f2fe;"> Advanced Analytics</h5>
+                <p class="text-muted">Visualize your spending patterns with charts, trends, and detailed category breakdowns.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Getting Started -->
+    <div style="background: #1a1a1a; padding: 2rem; border-radius: 10px; border: 1px solid #333;">
+        <h2 class="mb-4"> Getting Started</h2>
+        <ol style="line-height: 1.8;">
+            <li><strong>Create Account:</strong> Click the Signup button to create your secure account</li>
+            <li><strong>Add Expenses:</strong> Use the "Add Expense" button to track your spending</li>
+            <li><strong>View & Analyze:</strong> Check your expenses and analyze spending patterns</li>
+            <li><strong>Configure Settings:</strong> Customize background mode preferences in settings</li>
+        </ol>
+    </div>
+
+    {% if not session.get('user_id') %}
+    <div class="text-center mt-5">
+        <p class="text-muted mb-3">New to Expense Tracker?</p>
+        <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg me-2">Create Account</a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-lg">Login</a>
+    </div>
+    {% endif %}
 </div>
+
+<style>
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
 {% endblock %}
