@@ -161,6 +161,15 @@ template_folder = os.path.join(base_path, 'templates')
 static_folder = os.path.join(base_path, 'static')
 
 app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
+
+# when frozen, serve dynamic static files (charts) from user data directory
+if getattr(sys, 'frozen', False):
+    user_static_dir = os.path.join(get_user_data_path(), 'static')
+    if not os.path.exists(user_static_dir):
+        os.makedirs(user_static_dir)
+    # override flask's static folder so url_for('static') points here
+    app.static_folder = user_static_dir
+
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
 bcrypt = Bcrypt(app)
 
@@ -472,13 +481,20 @@ def analyze_expenses():
     year_amounts = [year_totals[c] for c in year_categories]
 
     # Generate charts
+    # determine where to save charts; when running frozen use flask's static_folder
     if getattr(sys, 'frozen', False):
-        static_path = os.path.join(get_user_data_path(), 'static')
+        static_path = app.static_folder
     else:
         static_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     
     if not os.path.exists(static_path):
         os.makedirs(static_path)
+    # remove stale images from previous analyses so cache tokens reflect fresh files
+    for old in ('chart.png', 'bar_chart.png', 'yearly_trend.png'):
+        try:
+            os.remove(os.path.join(static_path, old))
+        except OSError:
+            pass
 
     pie_file = None
     bar_chart_file = None
@@ -564,10 +580,23 @@ def analyze_expenses():
     year_total = sum(year_amounts)
     year_highest = max(year_categories, key=lambda c: year_amounts[year_categories.index(c)]) if year_categories else None
 
+    # calculate cache-busting tokens based on file modification times
+    def make_token(path):
+        try:
+            return str(int(os.path.getmtime(path)))
+        except Exception:
+            return str(int(datetime.now().timestamp()))
+
+    chart_token = make_token(pie_file) if pie_file else ''
+    bar_token = make_token(bar_chart_file) if bar_chart_file else ''
+    trend_token = make_token(yearly_trend_file) if yearly_trend_file else ''
+
     return render_template(
         'analyze.html',
         chart=os.path.basename(pie_file) if pie_file else None,
+        chart_token=chart_token,
         bar_chart=os.path.basename(bar_chart_file) if bar_chart_file else None,
+        bar_token=bar_token,
         total_period=sum(bar_amounts),
         highest_period=max(bar_categories, key=lambda c: bar_amounts[bar_categories.index(c)]) if bar_categories else None,
         start_date=start_date.strftime("%d-%m-%Y"),
@@ -577,7 +606,8 @@ def analyze_expenses():
         current_month_highest=current_month_highest,
         year_total=year_total,
         year_highest=year_highest,
-        yearly_trend=os.path.basename(yearly_trend_file) if yearly_trend_file else None
+        yearly_trend=os.path.basename(yearly_trend_file) if yearly_trend_file else None,
+        trend_token=trend_token
     )
 
 @app.route('/edit/<int:expense_id>', methods=['GET', 'POST'])

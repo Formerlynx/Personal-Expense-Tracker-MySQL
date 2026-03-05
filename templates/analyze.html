@@ -63,30 +63,51 @@
         const rangeSelect = document.getElementById('range');
         const customContainer = document.getElementById('custom-range');
         const submitBtn = document.getElementById('range-submit');
+        const startInput = document.getElementById('start_date');
+        const endInput = document.getElementById('end_date');
+        const form = rangeSelect ? rangeSelect.closest('form') : null;
+
+        function updateCustomVisibility() {
+            if (rangeSelect.value === 'custom') {
+                customContainer.style.display = 'flex';
+            } else {
+                customContainer.style.display = 'none';
+            }
+        }
+
+        function maybeSubmit() {
+            // only submit if not in custom mode or both dates provided
+            if (!form) return;
+            if (rangeSelect.value !== 'custom' || (startInput.value && endInput.value)) {
+                form.submit();
+            }
+        }
 
         if (rangeSelect) {
             rangeSelect.addEventListener('change', function () {
-                if (this.value === 'custom') {
-                    customContainer.style.display = 'flex';
-                } else {
-                    customContainer.style.display = 'none';
-                }
+                updateCustomVisibility();
+                maybeSubmit();
             });
         }
+        if (startInput) startInput.addEventListener('change', maybeSubmit);
+        if (endInput) endInput.addEventListener('change', maybeSubmit);
+
+        // initialize visibility on page load
+        updateCustomVisibility();
     </script>
     
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem;">
         {% if chart %}
         <div style="text-align: center;">
             <h3 style="color: #667eea; margin-bottom: 1rem;">Current Month Breakdown</h3>
-            <img src="{{ url_for('static', filename=chart) }}" alt="Expense Breakdown Chart" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+            <img src="{{ url_for('static', filename=chart) }}?t={{ chart_token }}" alt="Expense Breakdown Chart" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
         </div>
         {% endif %}
         
         {% if bar_chart %}
         <div style="text-align: center;">
             <h3 style="color: #667eea; margin-bottom: 1rem;">Time Period Spending Trend</h3>
-            <img src="{{ url_for('static', filename=bar_chart) }}" alt="Monthly Spending Chart" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+            <img src="{{ url_for('static', filename=bar_chart) }}?t={{ bar_token }}" alt="Monthly Spending Chart" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
             <p style="color: #ffffff; margin-top: 1rem; font-size: 0.9rem;">
                 Period: {{ start_date }} to {{ end_date }}
             </p>
@@ -97,7 +118,7 @@
     {% if yearly_trend %}
     <div style="margin-top: 2rem; text-align: center;">
         <h3 style="color: #667eea; margin-bottom: 1rem;">Yearly Spend Tracker</h3>
-        <img src="{{ url_for('static', filename=yearly_trend) }}" alt="Yearly Trend" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+        <img src="{{ url_for('static', filename=yearly_trend) }}?t={{ trend_token }}" alt="Yearly Trend" style="max-width: 100%; height: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
     </div>
     {% endif %}
     
