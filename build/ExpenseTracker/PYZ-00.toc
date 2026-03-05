@@ -1,4 +1,5 @@
-('C:\\Users\\VGK\\Downloads\\CS PROJECT\\build\\ExpenseTracker\\PYZ-00.pyz',
+('C:\\Users\\VGK\\OneDrive\\Desktop\\CS '
+ 'PROJECT\\build\\ExpenseTracker\\PYZ-00.pyz',
  [('PIL',
    'C:\\Users\\VGK\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages\\PIL\\__init__.py',
    'PYMODULE'),

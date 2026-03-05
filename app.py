@@ -515,15 +515,14 @@ def analyze_expenses():
     except Exception as e:
         print(f"Error generating bar chart: {e}")
 
-    # Generate multi-year trend if applicable
+    # Generate multi-year/month trend for the selected period
     try:
-        if len(totals_by_year) > 1:
+        # only build a trend if we actually have data at all
+        if totals_by_year:
             month_totals = defaultdict(float)
-            min_year = min(totals_by_year.keys())
-            max_year = max(totals_by_year.keys())
-            
-            start_month = datetime(min_year, 1, 1).date()
-            end_month = datetime(max_year, 12, 1).date()
+            # base the range on the start/end dates the user chose
+            start_month = start_date.replace(day=1)
+            end_month = end_date.replace(day=1)
             
             months = []
             cur = start_month
@@ -535,7 +534,7 @@ def analyze_expenses():
                 try:
                     amt = float(EncryptionManager.decrypt(row[1], encryption_key))
                     d = parse_date(row[2])
-                    if d:
+                    if d and start_date <= d <= end_date:
                         m_first = d.replace(day=1)
                         month_totals[m_first] += amt
                 except:
