@@ -5,13 +5,13 @@ This guide will walk you through the complete setup of the Expense Tracker appli
 ## Prerequisites
 
 ### System Requirements
-- **Windows 7** or later (or macOS/Linux for development)
-- **Python 3.9+** (for running from source)
+- **Windows 10** or later (or equal macOS/Linux versions)
+- **Python 3.11+** (for running from source)
 - **At least 500 MB** free disk space
 - **Microsoft Access** (optional - for manual database creation)
 
 ### For Running from Source
-You'll need Python 3.9 or newer installed on your system.
+You'll need Python 3.11 or newer installed on your system.
 
 ## Installation Options
 
@@ -21,7 +21,7 @@ This is the recommended approach if you want to modify the code or run the lates
 
 #### Step 1: Clone or Download the Project
 
-```bash
+```cmd/ powershell
 # If using git
 git clone <repo-url> expense-tracker
 cd expense-tracker
@@ -31,7 +31,7 @@ cd expense-tracker
 
 #### Step 2: Create a Virtual Environment
 
-```bash
+```cmd/ powershell
 # Create virtual environment
 python -m venv venv
 
@@ -45,7 +45,7 @@ source venv/bin/activate
 
 #### Step 3: Install Dependencies
 
-```bash
+```cmd/ powershell
 # Upgrade pip first
 pip install --upgrade pip
 
@@ -69,7 +69,7 @@ pip install -r requirements.txt
 
 Ensure the database folder exists:
 
-```bash
+```cmd/ powershell
 # The Database folder should already exist with expenses.accdb
 # If not, create it:
 mkdir Database
@@ -77,7 +77,7 @@ mkdir Database
 
 #### Step 5: Run the Application
 
-```bash
+```cmd/ powershell
 # With virtual environment activated:
 python app.py
 ```
@@ -136,7 +136,7 @@ If you're using the executable, the database is bundled and copied automatically
 If you need to create the database manually:
 
 #### Option A: Use Template
-```bash
+```cmd/ powershell
 # Copy the template database
 copy Database\expenses_template.accdb Database\expenses.accdb
 ```
@@ -229,7 +229,7 @@ Access Settings page while logged in:
 ### Issue: "Database not found"
 
 **Solution:**
-```bash
+```cmd/ powershell
 # Check Database folder exists
 ls Database/
 
@@ -242,7 +242,7 @@ copy Database\expenses_template.accdb Database\expenses.accdb
 ### Issue: "Module not found" or Import Errors
 
 **Solution:**
-```bash
+```cmd/ powershell
 # Make sure virtual environment is activated
 venv\Scripts\activate
 
@@ -260,7 +260,7 @@ The app will automatically try to use the same port. If you need to change it:
 2. Change the port in the `if __name__ == '__main__'` block
 3. Update browser access URL
 
-```bash
+```cmd/ powershell
 # Example: Change to port 8000
 python app.py  # Browser will access 127.0.0.1:8000
 ```
@@ -327,7 +327,7 @@ expense-tracker/
 
 #### Testing
 
-```bash
+```cmd/ powershell
 # Run with debug mode
 python -m flask --app app run --debug
 
@@ -341,13 +341,13 @@ python app.py
 
 ### Prerequisites
 
-```bash
+```cmd/ powershell
 pip install pyinstaller
 ```
 
 ### Build Process
 
-```bash
+```cmd/ powershell
 # Create executable
 python build_executable.py
 
