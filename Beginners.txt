@@ -1,0 +1,13 @@
+For beginners:
+
+1. User can open the ExpenseTracker.exe file from the file list in the repository and download it to the particular folder for accessing later.
+2. Once it has finished downloading the user can then download the requirements.txt file, from the same file list, to the same folder to which the above ExpenseTracker.exe file was downloaded.
+3. Once both of them have finished downloading you can double click the ExpenseTracker.exe file and it should automatically set up the database of expenses to your local drive.
+
+Note: Once set-up the local site will open for usage automatically. For later access the user can open it via the system tray, by clicking the blue icon (The icons on the bottom right of your computer display, if not visible try clicking the upward arrow) or double click the ExpenseTracker.exe again. [The second method isn't reccommendable]
+Note: If the User doesn't want the Web-App to run in the background they can disable the correspoding setting in the settings tab of the app, end the program via the task manager, or right click on the blue icon in the system tray and quit.
+
+Any quesries or bugs can be directed to me via email or by ticketing an issue and will provide a clarification at the earliest
+
+Verghese G Keenalil [@Formerlynx]
+verghese.keenalil@gmail.com
