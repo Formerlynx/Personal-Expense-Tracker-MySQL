@@ -6,7 +6,7 @@ Personal expense tracker with AES-256 encryption and analytics
 
 A comprehensive desktop application for tracking personal expenses with powerful analytics, visualization features, and **military-grade encryption**. Built with Flask and packaged as a standalone Windows executable.
 
-![Expense Tracker](https://img.shields.io/badge/Python-3.9+-blue.svg)
+![Expense Tracker](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-3.0.0-green.svg)
 ![Encryption](https://img.shields.io/badge/Encryption-AES--256-red.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
