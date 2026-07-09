@@ -26,7 +26,8 @@ a = Analysis(
         'flask',
         'matplotlib',
         'matplotlib.pyplot',
-        'pyodbc',
+        'mysql',
+        'mysql.connector',
         'flask_bcrypt',
         'bcrypt',
         'cryptography',
@@ -95,7 +96,7 @@ def check_files():
         print("  - app.py")
         print("  - templates/ folder")
         print("  - static/ folder")
-        print("  - Database/ folder with expenses.accdb")
+        print("  - Database/ folder")
         return False
     
     print("✓ All required files found")
@@ -156,7 +157,7 @@ def build_executable():
                 '--add-data', 'Database;Database',
                 '--hidden-import=flask',
                 '--hidden-import=matplotlib',
-                '--hidden-import=pyodbc',
+                '--hidden-import=mysql.connector',
                 '--hidden-import=flask_bcrypt',
                 '--name', 'ExpenseTracker',
                 'app.py'

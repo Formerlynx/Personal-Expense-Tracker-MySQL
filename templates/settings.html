@@ -12,6 +12,7 @@
         </div>
         <div class="card-body">
             <form method="POST">
+                <input type="hidden" name="action" value="background_mode">
                 <div class="mb-3">
                     <label class="form-label">How should the app run?</label>
                     
@@ -46,6 +47,44 @@
 
                 <button type="submit" class="btn btn-primary">Save Settings</button>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+
+    <div class="card bg-dark text-white mb-4">
+        <div class="card-header">
+            <h3> MySQL Database Configuration</h3>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="action" value="mysql_config">
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label for="mysql_host" class="form-label">MySQL Host</label>
+                        <input type="text" class="form-control bg-secondary text-white border-dark" id="mysql_host" name="mysql_host" value="{{ mysql_config.host }}" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="mysql_port" class="form-label">Port</label>
+                        <input type="number" class="form-control bg-secondary text-white border-dark" id="mysql_port" name="mysql_port" value="{{ mysql_config.port }}" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="mysql_user" class="form-label">Username</label>
+                    <input type="text" class="form-control bg-secondary text-white border-dark" id="mysql_user" name="mysql_user" value="{{ mysql_config.user }}" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="mysql_password" class="form-label">Password</label>
+                    <input type="password" class="form-control bg-secondary text-white border-dark" id="mysql_password" name="mysql_password" value="{{ mysql_config.password }}" placeholder="Leave blank if none">
+                </div>
+
+                <div class="mb-3">
+                    <label for="mysql_db" class="form-label">Database Name</label>
+                    <input type="text" class="form-control bg-secondary text-white border-dark" id="mysql_db" name="mysql_db" value="{{ mysql_config.database }}" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Update Database Settings</button>
             </form>
         </div>
     </div>
