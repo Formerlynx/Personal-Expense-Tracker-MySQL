@@ -45,16 +45,20 @@
             <h1 class="h3 mb-0"> Expense Tracker</h1>
             <nav class="navbar-expand-md">
                 <div class="navbar-nav d-flex gap-2">
-                    <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">Home</a>
-                    {% if session.get('user_id') %}
-                        <a href="{{ url_for('add_expense') }}" class="btn btn-outline-light btn-sm"> Add</a>
-                        <a href="{{ url_for('view_expenses') }}" class="btn btn-outline-light btn-sm"> Expenses</a>
-                        <a href="{{ url_for('analyze_expenses') }}" class="btn btn-outline-light btn-sm"> Analytics</a>
-                        <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary btn-sm"> Settings</a>
-                        <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm"> Logout</a>
+                    {% if not db_connected %}
+                        <a href="{{ url_for('db_setup') }}" class="btn btn-danger btn-sm">Database Setup</a>
                     {% else %}
-                        <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-sm"> Login</a>
-                        <a href="{{ url_for('signup') }}" class="btn btn-outline-light btn-sm"> Signup</a>
+                        <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm">Home</a>
+                        {% if session.get('user_id') %}
+                            <a href="{{ url_for('add_expense') }}" class="btn btn-outline-light btn-sm"> Add</a>
+                            <a href="{{ url_for('view_expenses') }}" class="btn btn-outline-light btn-sm"> Expenses</a>
+                            <a href="{{ url_for('analyze_expenses') }}" class="btn btn-outline-light btn-sm"> Analytics</a>
+                            <a href="{{ url_for('settings') }}" class="btn btn-outline-secondary btn-sm"> Settings</a>
+                            <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm"> Logout</a>
+                        {% else %}
+                            <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-sm"> Login</a>
+                            <a href="{{ url_for('signup') }}" class="btn btn-outline-light btn-sm"> Signup</a>
+                        {% endif %}
                     {% endif %}
                 </div>
             </nav>

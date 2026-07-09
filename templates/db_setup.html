@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}MySQL Setup - Expense Tracker{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 600px;">
+    <div class="card bg-dark text-white border-danger mb-4 shadow">
+        <div class="card-header bg-danger text-white">
+            <h3 class="mb-0"><i class="bi bi-exclamation-triangle-fill"></i> Database Setup Required</h3>
+        </div>
+        <div class="card-body">
+            <p class="lead">The application could not connect to a MySQL database using the current settings.</p>
+            <p>Please enter your MySQL server credentials below. The application will attempt to connect, create the database if it doesn't exist, and set up the necessary tables.</p>
+            
+            <hr class="border-secondary">
+            
+            <form method="POST" action="{{ url_for('db_setup') }}">
+                <div class="row">
+                    <div class="col-md-8 mb-3">
+                        <label for="mysql_host" class="form-label">MySQL Host</label>
+                        <input type="text" class="form-control bg-secondary text-white border-dark" id="mysql_host" name="mysql_host" value="{{ mysql_config.host }}" placeholder="localhost" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="mysql_port" class="form-label">Port</label>
+                        <input type="number" class="form-control bg-secondary text-white border-dark" id="mysql_port" name="mysql_port" value="{{ mysql_config.port }}" placeholder="3306" required>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="mysql_user" class="form-label">Username</label>
+                    <input type="text" class="form-control bg-secondary text-white border-dark" id="mysql_user" name="mysql_user" value="{{ mysql_config.user }}" placeholder="root" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="mysql_password" class="form-label">Password</label>
+                    <input type="password" class="form-control bg-secondary text-white border-dark" id="mysql_password" name="mysql_password" value="{{ mysql_config.password }}" placeholder="Leave blank if none">
+                </div>
+
+                <div class="mb-3">
+                    <label for="mysql_db" class="form-label">Database Name</label>
+                    <input type="text" class="form-control bg-secondary text-white border-dark" id="mysql_db" name="mysql_db" value="{{ mysql_config.database }}" placeholder="expense_tracker" required>
+                </div>
+
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-danger">Verify &amp; Initialize Database</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.form-control:focus {
+    background-color: #3d3d3d !important;
+    color: #fff;
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
+}
+</style>
+{% endblock %}

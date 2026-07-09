@@ -8,14 +8,13 @@ from collections import defaultdict
 import textwrap
 import os
 import sys
-import pyodbc
+import mysql.connector
 import shutil
 import base64
 import secrets
 import threading
 import webbrowser
 import logging
-import textwrap
 from flask_bcrypt import Bcrypt
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -61,12 +60,46 @@ def is_first_run():
     settings_file = get_settings_file()
     return not os.path.exists(settings_file)
 
+def save_settings(autostart_enable=None, mysql_config=None):
+    """Save user preferences and database settings"""
+    settings_file = get_settings_file()
+    
+    # Read existing settings first
+    current_settings = {}
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if '=' in line:
+                        k, v = line.split('=', 1)
+                        current_settings[k.strip()] = v.strip()
+        except Exception as e:
+            logger.error(f"Error reading settings for save: {e}")
+
+    # Update settings
+    if autostart_enable is not None:
+        current_settings['autostart'] = 'yes' if autostart_enable else 'no'
+    current_settings['first_run_done'] = 'yes'
+    
+    if mysql_config:
+        current_settings['mysql_host'] = mysql_config.get('host', 'localhost')
+        current_settings['mysql_user'] = mysql_config.get('user', 'root')
+        current_settings['mysql_password'] = mysql_config.get('password', '')
+        current_settings['mysql_db'] = mysql_config.get('database', 'expense_tracker')
+        current_settings['mysql_port'] = str(mysql_config.get('port', 3306))
+        
+    # Write back to settings file
+    try:
+        with open(settings_file, 'w') as f:
+            for k, v in current_settings.items():
+                f.write(f"{k}={v}\n")
+    except Exception as e:
+        logger.error(f"Error saving settings: {e}")
+
 def save_autostart_preference(enable):
     """Save user's autostart preference"""
-    settings_file = get_settings_file()
-    with open(settings_file, 'w') as f:
-        f.write(f"autostart={'yes' if enable else 'no'}\n")
-        f.write(f"first_run_done=yes\n")
+    save_settings(autostart_enable=enable)
 
 def should_autostart():
     """Check if app should start in background"""
@@ -82,6 +115,57 @@ def should_autostart():
     except:
         pass
     return True
+
+def get_mysql_config():
+    """Retrieve MySQL connection settings from environment or settings.txt"""
+    # Default settings
+    config = {
+        'host': 'localhost',
+        'user': 'root',
+        'password': '',
+        'database': 'expense_tracker',
+        'port': 3306
+    }
+    
+    # Read settings.txt if it exists
+    settings_file = get_settings_file()
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if '=' in line:
+                        key, val = line.split('=', 1)
+                        key = key.strip()
+                        val = val.strip()
+                        if key == 'mysql_host':
+                            config['host'] = val
+                        elif key == 'mysql_user':
+                            config['user'] = val
+                        elif key == 'mysql_password':
+                            config['password'] = val
+                        elif key == 'mysql_db':
+                            config['database'] = val
+                        elif key == 'mysql_port':
+                            try:
+                                config['port'] = int(val)
+                            except ValueError:
+                                pass
+        except Exception as e:
+            logger.warning(f"Error reading settings.txt for MySQL config: {e}")
+            
+    # Override with environment variables if present
+    config['host'] = os.environ.get('MYSQL_HOST', config['host'])
+    config['user'] = os.environ.get('MYSQL_USER', config['user'])
+    config['password'] = os.environ.get('MYSQL_PASSWORD', config['password'])
+    config['database'] = os.environ.get('MYSQL_DB', config['database'])
+    if 'MYSQL_PORT' in os.environ:
+        try:
+            config['port'] = int(os.environ['MYSQL_PORT'])
+        except ValueError:
+            pass
+            
+    return config
 
 def show_first_run_dialog():
     """Show dialog on first run asking about background running"""
@@ -104,25 +188,130 @@ def show_first_run_dialog():
     root.destroy()
     return result
 
+# Global variable for database connection status
+DB_CONNECTED = False
+
 def initialize_database():
     """
-    Initialize the database for the application.
-    If running as executable, copy template database to user data folder.
+    Initialize the MySQL database and create the required tables.
     """
-    if getattr(sys, 'frozen', False):
-        user_data_path = get_user_data_path()
-        db_path = os.path.join(user_data_path, 'expenses.accdb')
+    global DB_CONNECTED
+    config = get_mysql_config()
+    db_name = config['database']
+    
+    # 1. Connect to MySQL server without database first to ensure database exists
+    conn = None
+    try:
+        conn = mysql.connector.connect(
+            host=config['host'],
+            user=config['user'],
+            password=config['password'],
+            port=config['port']
+        )
+    except mysql.connector.Error as e:
+        logger.warning(f"Could not connect to MySQL server using primary settings: {e}")
         
-        if not os.path.exists(db_path):
-            template_db = os.path.join(sys._MEIPASS, 'Database', 'expenses.accdb')
-            if os.path.exists(template_db):
-                shutil.copy2(template_db, db_path)
-            else:
-                raise FileNotFoundError("Template database not found in executable!")
+        # Try fallback combinations if hostname is localhost/127.0.0.1 and user is root
+        if config['host'] in ('localhost', '127.0.0.1') and config['user'] == 'root':
+            # Attempt 1: password 'tiger'
+            logger.info("Attempting automatic database setup fallback: (localhost, port: default, root, password: tiger)")
+            try:
+                conn = mysql.connector.connect(
+                    host=config['host'],
+                    user=config['user'],
+                    password='tiger',
+                    port=config['port']
+                )
+                config['password'] = 'tiger'
+                save_settings(mysql_config=config)
+                logger.info("Successfully connected to MySQL using fallback password 'tiger'. Settings saved.")
+            except mysql.connector.Error as e_tiger:
+                # Attempt 2: password 'root'
+                logger.info("Attempting automatic database setup fallback: (localhost, port: default, root, password: root)")
+                try:
+                    conn = mysql.connector.connect(
+                        host=config['host'],
+                        user=config['user'],
+                        password='root',
+                        port=config['port']
+                    )
+                    config['password'] = 'root'
+                    save_settings(mysql_config=config)
+                    logger.info("Successfully connected to MySQL using fallback password 'root'. Settings saved.")
+                except mysql.connector.Error as e_root:
+                    logger.error(f"All database connection attempts and fallbacks failed. Errors: tiger: {e_tiger}, root: {e_root}")
+                    DB_CONNECTED = False
+                    return
+        else:
+            DB_CONNECTED = False
+            return
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
+        conn.close()
+        logger.info(f"Database '{db_name}' initialized/verified.")
+    except mysql.connector.Error as e:
+        logger.error(f"Could not create database '{db_name}': {e}")
+        DB_CONNECTED = False
+        return
         
-        return db_path
-    else:
-        return os.path.join(os.getcwd(), 'Database', 'expenses.accdb')
+    # 2. Connect to the database and create tables if they do not exist
+    try:
+        conn = get_db_connection_no_check()
+        cursor = conn.cursor()
+        
+        # Create users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL,
+                salt VARCHAR(255) NOT NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        # Create expenses table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                expense_date VARCHAR(500) NOT NULL,
+                category VARCHAR(500) NOT NULL,
+                amount VARCHAR(500) NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """)
+        
+        conn.commit()
+        conn.close()
+        logger.info("Database tables initialized/verified successfully.")
+        DB_CONNECTED = True
+    except mysql.connector.Error as e:
+        logger.error(f"Error creating database tables: {e}")
+        DB_CONNECTED = False
+
+def get_db_connection_no_check():
+    config = get_mysql_config()
+    conn = mysql.connector.connect(
+        host=config['host'],
+        user=config['user'],
+        password=config['password'],
+        database=config['database'],
+        port=config['port']
+    )
+    return conn
+
+def get_db_connection():
+    global DB_CONNECTED
+    try:
+        conn = get_db_connection_no_check()
+        DB_CONNECTED = True
+        return conn
+    except mysql.connector.Error as e:
+        logger.error(f"Failed to connect to MySQL database: {e}")
+        DB_CONNECTED = False
+        raise e
 
 # Encryption utilities
 class EncryptionManager:
@@ -185,49 +374,86 @@ def handle_exception(e):
     logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
     return f"Error: {str(e)}", 500
 
-# Initialize database path
-DB_PATH = initialize_database()
+# Initialize database (at import time)
+initialize_database()
 
 # Global variable for system tray icon
 tray_icon = None
 
-def get_db_connection():
-    db_password = 'password'
-    
-    # Try different connection methods
-    conn_str_options = [
-        # Try without password first
-        r"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={DB_PATH}",
-        # Try with password
-        r"DRIVER={{Microsoft Access Driver (*.mdb, *.accdb)}};DBQ={DB_PATH};PWD={db_password}",
-        # Try alternative driver name
-        r"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={DB_PATH}",
-        # Try with password for OLEDB
-        r"Provider=Microsoft.ACE.OLEDB.12.0;Data Source={DB_PATH};Jet OLEDB:Database Password={db_password}",
-    ]
-    
-    for conn_str_template in conn_str_options:
-        try:
-            conn_str = conn_str_template.format(DB_PATH=DB_PATH, db_password=db_password)
-            logger.debug(f"Trying connection: {conn_str}")
-            conn = pyodbc.connect(conn_str)
-            logger.info("Database connection successful")
-            return conn
-        except pyodbc.Error as e:
-            logger.warning(f"Connection failed: {conn_str} - {str(e)}")
-            continue
-    
-    # If all fail, raise the last error
-    raise pyodbc.Error("Failed to connect to database. Please ensure Microsoft Access Database Engine is installed.")
-
 def is_logged_in():
     return 'user_id' in session and 'encryption_key' in session
 
+@app.context_processor
+def inject_db_status():
+    global DB_CONNECTED
+    return dict(db_connected=DB_CONNECTED)
+
 @app.before_request
 def restrict_access():
+    global DB_CONNECTED
+    
+    # 1. Allow static files to load unconditionally
+    if request.endpoint == 'static':
+        return
+        
+    # 2. If database is not connected, redirect all requests to db_setup
+    if not DB_CONNECTED:
+        if request.endpoint != 'db_setup':
+            return redirect(url_for('db_setup'))
+        return
+        
+    # 3. If database is connected, prevent accessing db_setup route
+    if request.endpoint == 'db_setup':
+        return redirect(url_for('index'))
+        
+    # 4. Standard route access restriction (allow login and signup)
     allowed_routes = ['login', 'signup', 'static']
     if not is_logged_in() and request.endpoint not in allowed_routes:
         return redirect(url_for('login'))
+
+@app.route('/db-setup', methods=['GET', 'POST'])
+def db_setup():
+    global DB_CONNECTED
+    mysql_config = get_mysql_config()
+    
+    if request.method == 'POST':
+        new_mysql_config = {
+            'host': request.form.get('mysql_host', 'localhost').strip(),
+            'user': request.form.get('mysql_user', 'root').strip(),
+            'password': request.form.get('mysql_password', ''),
+            'database': request.form.get('mysql_db', 'expense_tracker').strip(),
+            'port': int(request.form.get('mysql_port', '3306').strip() or '3306')
+        }
+        
+        # Test connection and initialize tables
+        try:
+            # First connect to server and create database if not exists
+            conn = mysql.connector.connect(
+                host=new_mysql_config['host'],
+                user=new_mysql_config['user'],
+                password=new_mysql_config['password'],
+                port=new_mysql_config['port']
+            )
+            cursor = conn.cursor()
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{new_mysql_config['database']}`")
+            conn.close()
+            
+            # Save settings and reinitialize database tables
+            save_settings(mysql_config=new_mysql_config)
+            initialize_database()
+            
+            if DB_CONNECTED:
+                flash("MySQL database connected and tables initialized successfully!", "success")
+                return redirect(url_for('login'))
+            else:
+                flash("Connection succeeded, but failed to create tables in the database.", "danger")
+        except mysql.connector.Error as e:
+            flash(f"Failed to connect to MySQL database: {str(e)}", "danger")
+            
+        # Refresh config values for render
+        mysql_config = new_mysql_config
+            
+    return render_template('db_setup.html', mysql_config=mysql_config)
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -243,14 +469,14 @@ def signup():
         cursor = conn.cursor()
 
         try:
-            cursor.execute("INSERT INTO users (username, password, salt) VALUES (?, ?, ?)", 
+            cursor.execute("INSERT INTO users (username, password, salt) VALUES (%s, %s, %s)", 
                           (username, hashed_password, salt_b64))
             conn.commit()
             conn.close()
 
             flash("Account created successfully! Please log in.", "success")
             return redirect(url_for('login'))
-        except pyodbc.IntegrityError:
+        except mysql.connector.IntegrityError:
             flash("Username already exists, please choose another one.", "danger")
             conn.close()
             return redirect(url_for('signup'))
@@ -266,7 +492,7 @@ def login():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id, password, salt FROM users WHERE username = ?", (username,))
+        cursor.execute("SELECT id, password, salt FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
         conn.close()
 
@@ -302,7 +528,7 @@ def add_expense():
     
     encryption_key = base64.b64decode(session['encryption_key'])
 
-    cursor.execute("SELECT DISTINCT category FROM expenses WHERE user_id = ?", (session['user_id'],))
+    cursor.execute("SELECT DISTINCT category FROM expenses WHERE user_id = %s", (session['user_id'],))
     encrypted_categories = [row[0] for row in cursor.fetchall()]
     categories = list(set([EncryptionManager.decrypt(cat, encryption_key) for cat in encrypted_categories]))
     categories.sort()
@@ -337,7 +563,7 @@ def add_expense():
         encrypted_amount = EncryptionManager.encrypt(str(rounded_amount), encryption_key)
 
         cursor.execute(
-            "INSERT INTO expenses (expense_date, category, amount, user_id) VALUES (?, ?, ?, ?)",
+            "INSERT INTO expenses (expense_date, category, amount, user_id) VALUES (%s, %s, %s, %s)",
             (encrypted_date, encrypted_category, encrypted_amount, session['user_id'])
         )
         conn.commit()
@@ -360,7 +586,7 @@ def view_expenses():
     
     encryption_key = base64.b64decode(session['encryption_key'])
 
-    cursor.execute("SELECT id, expense_date, category, amount FROM expenses WHERE user_id = ? ORDER BY expense_date DESC", 
+    cursor.execute("SELECT id, expense_date, category, amount FROM expenses WHERE user_id = %s ORDER BY expense_date DESC", 
                    (session['user_id'],))
     rows = cursor.fetchall()
 
@@ -401,7 +627,6 @@ def view_expenses():
     conn.close()
     
     # Group expenses by year-month
-    from collections import defaultdict
     grouped_expenses = defaultdict(list)
     for exp in expenses:
         grouped_expenses[exp['year_month']].append(exp)
@@ -437,7 +662,7 @@ def analyze_expenses():
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT category, amount, expense_date FROM expenses WHERE user_id = ?", 
+    cursor.execute("SELECT category, amount, expense_date FROM expenses WHERE user_id = %s", 
                    (session['user_id'],))
     rows = cursor.fetchall()
     conn.close()
@@ -670,7 +895,7 @@ def edit_expense(expense_id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT expense_date, category, amount FROM expenses WHERE id = ? AND user_id = ?", 
+    cursor.execute("SELECT expense_date, category, amount FROM expenses WHERE id = %s AND user_id = %s", 
                    (expense_id, session['user_id']))
     expense = cursor.fetchone()
 
@@ -701,7 +926,7 @@ def edit_expense(expense_id):
         encrypted_amount = EncryptionManager.encrypt(str(amount_to_store), encryption_key)
 
         cursor.execute(
-            "UPDATE expenses SET expense_date = ?, category = ?, amount = ? WHERE id = ? AND user_id = ?",
+            "UPDATE expenses SET expense_date = %s, category = %s, amount = %s WHERE id = %s AND user_id = %s",
             (encrypted_date, encrypted_category, encrypted_amount, expense_id, session['user_id'])
         )
         conn.commit()
@@ -735,7 +960,7 @@ def delete_expense(expense_id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", 
+    cursor.execute("DELETE FROM expenses WHERE id = %s AND user_id = %s", 
                    (expense_id, session['user_id']))
     conn.commit()
     conn.close()
@@ -748,25 +973,67 @@ def index():
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
-    """Settings page to manage background mode"""
+    """Settings page to manage background mode and MySQL connection"""
     if not is_logged_in():
         flash("Please log in to access settings.", "warning")
         return redirect(url_for('login'))
     
     current_setting = should_autostart()
+    mysql_config = get_mysql_config()
     
     if request.method == 'POST':
-        enable_background = request.form.get('background_mode') == 'yes'
-        save_autostart_preference(enable_background)
+        action = request.form.get('action')
         
-        if enable_background:
-            flash("Background mode enabled! App will run in system tray.", "success")
-        else:
-            flash("Background mode disabled. App will close when you close the browser.", "info")
-        
+        if action == 'background_mode':
+            enable_background = request.form.get('background_mode') == 'yes'
+            save_autostart_preference(enable_background)
+            if enable_background:
+                flash("Background mode enabled! App will run in system tray.", "success")
+            else:
+                flash("Background mode disabled. App will close when you close the browser.", "info")
+                
+        elif action == 'mysql_config':
+            new_mysql_config = {
+                'host': request.form.get('mysql_host', 'localhost').strip(),
+                'user': request.form.get('mysql_user', 'root').strip(),
+                'password': request.form.get('mysql_password', ''),
+                'database': request.form.get('mysql_db', 'expense_tracker').strip(),
+                'port': int(request.form.get('mysql_port', '3306').strip() or '3306')
+            }
+            # Test connection
+            try:
+                # First connect to server and create database if not exists
+                conn = mysql.connector.connect(
+                    host=new_mysql_config['host'],
+                    user=new_mysql_config['user'],
+                    password=new_mysql_config['password'],
+                    port=new_mysql_config['port']
+                )
+                cursor = conn.cursor()
+                cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{new_mysql_config['database']}`")
+                conn.close()
+                
+                # Now try to connect to the specific db
+                conn = mysql.connector.connect(
+                    host=new_mysql_config['host'],
+                    user=new_mysql_config['user'],
+                    password=new_mysql_config['password'],
+                    database=new_mysql_config['database'],
+                    port=new_mysql_config['port']
+                )
+                conn.close()
+                
+                # Save settings and reinitialize database tables
+                save_settings(mysql_config=new_mysql_config)
+                initialize_database()
+                
+                flash("Database connection verified and configuration saved successfully!", "success")
+            except mysql.connector.Error as e:
+                flash(f"Failed to connect to MySQL database: {str(e)}. Settings were NOT saved.", "danger")
+                
         return redirect(url_for('settings'))
-    
-    return render_template('settings.html', background_enabled=current_setting)
+        
+    return render_template('settings.html', background_enabled=current_setting, mysql_config=mysql_config)
 
 # System Tray Functions
 def create_image():
@@ -820,8 +1087,9 @@ if __name__ == '__main__':
         print("Expense Tracker Starting (Executable Mode)...")
         print("=" * 60)
         print(f"Base path: {base_path}")
-        print(f"Database path: {DB_PATH}")
-        print(f"Database exists: {os.path.exists(DB_PATH)}")
+        config = get_mysql_config()
+        print(f"Database Server: {config['host']}:{config['port']}")
+        print(f"Database Name: {config['database']}")
         print(f"Template folder: {template_folder}")
         print(f"Template folder exists: {os.path.exists(template_folder)}")
         print(f"Static folder: {static_folder}")
@@ -868,7 +1136,9 @@ if __name__ == '__main__':
         print("=" * 60)
         print("Expense Tracker Starting...")
         print("=" * 60)
-        print(f"Database location: {DB_PATH}")
+        config = get_mysql_config()
+        print(f"Database Server: {config['host']}:{config['port']}")
+        print(f"Database Name: {config['database']}")
         print("🔒 All expense data is encrypted with AES-256")
         print("Open your browser: http://127.0.0.1:5000")
         print("Press Ctrl+C to stop the server")
