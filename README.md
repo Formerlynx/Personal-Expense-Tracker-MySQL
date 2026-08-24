@@ -16,8 +16,6 @@ A comprehensive desktop application for tracking personal expenses with powerful
 
 > 👥 **Multi-User Ready**: Multiple people can use the app independently - everyone's data stays private and encrypted separately.
 
-> 🤖 **AI Assistant**: Powered by Groq's LLMs for personalized financial insights and advice.
-
 ---
 
 ## 📋 Table of Contents
@@ -71,7 +69,6 @@ A comprehensive desktop application for tracking personal expenses with powerful
 - 📱 **Responsive Layout** - Works on various screen sizes
 - ⚡ **Real-time Updates** - AJAX-powered delete operations
 - 🔒 **Session Management** - Secure user sessions with automatic logout
-- 🤖 **AI Chat Assistant** - Powered by Groq's LLMs for financial insights
 - 🖥️ **System Tray Integration** - Run app in background with quick access
 - ⚙️ **Settings Panel** - Configure MySQL connection, background mode, and preferences
 
@@ -97,9 +94,6 @@ Comprehensive visualization with:
 
 ### Settings Panel
 Configure MySQL connection and background mode preferences.
-
-### AI Chat Assistant
-Chat interface powered by Groq's LLMs for financial insights.
 
 ---
 
@@ -263,14 +257,6 @@ On first run, you'll need to configure your MySQL connection:
    - **Year-to-Date** - Annual totals
    - **Multi-Year Trend** - Monthly spending line chart (if data spans multiple years)
 
-### AI Chat Assistant
-
-- Click the **Chat** icon in the navigation
-- Ask questions about your spending habits
-- Get personalized financial insights
-- Powered by Groq's advanced LLMs
-- All queries are processed securely
-
 ### Settings & Preferences
 
 1. Navigate to **Settings**
@@ -356,7 +342,6 @@ Personal-Expense-Tracker-MySQL/
 - **cryptography 42.0.0** - AES-256 encryption for expense data
 - **matplotlib 3.8.2** - Chart generation
 - **python-dateutil** - Date calculations
-- **OpenAI Python Client** - Groq API integration for AI chat
 - **pystray** - System tray integration (Windows/Linux/macOS)
 
 ### Frontend
@@ -417,17 +402,7 @@ export MYSQL_PASSWORD=yourpassword
 export MYSQL_DB=expense_tracker
 export MYSQL_PORT=3306
 export FLASK_SECRET_KEY=your_secret_key
-export GROQ_API_KEY=your_groq_api_key
 ```
-
-### Groq API Key Setup
-
-For AI chat features, obtain a Groq API key:
-
-1. Visit [Groq Console](https://console.groq.com)
-2. Create an account and generate an API key
-3. Set environment variable: `GROQ_API_KEY=gsk_...`
-4. Or update in `app.py` (line 21)
 
 ### Changing Flask Secret Key
 
@@ -537,14 +512,6 @@ python build_executable.py
 - Run from command prompt to see errors: `ExpenseTracker.exe`
 - Check error log in `%LOCALAPPDATA%\ExpenseTracker\`
 
-#### AI Chat Not Working
-**Problem**: Chat feature returns empty or error  
-**Solution**:
-- Verify Groq API key is set: `export GROQ_API_KEY=gsk_...`
-- Check internet connection (required for API calls)
-- Ensure API key is valid at [Groq Console](https://console.groq.com)
-- Check app console for error messages
-
 #### System Tray Not Appearing
 **Problem**: System tray icon doesn't show  
 **Solution**:
@@ -624,7 +591,7 @@ Contributions are welcome! Here's how to contribute:
 - [ ] Multi-currency support with conversion rates
 - [ ] Expense search and advanced filtering
 - [ ] Recurring expenses automation
-- [ ] Expense categorization suggestions using AI
+- [ ] Expense categorization suggestions
 - [ ] Dark/light theme toggle
 - [ ] Category icons and custom colors
 - [ ] Mobile app or better mobile-responsive UI
@@ -683,7 +650,6 @@ SOFTWARE.
 - Bootstrap team for the UI framework
 - Matplotlib for visualization capabilities
 - MySQL database team
-- Groq for powerful LLM API
 - cryptography library for security
 - pystray for system tray integration
 - Python community for excellent libraries
