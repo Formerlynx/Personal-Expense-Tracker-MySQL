@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
+from openai import OpenAI
 
 # Import system tray dependencies
 try:
@@ -29,8 +30,12 @@ try:
     import tkinter as tk
     from tkinter import messagebox
     TRAY_AVAILABLE = True
-except ImportError:
+except Exception:
     TRAY_AVAILABLE = False
+
+
+# Initialize client (Set OPENAI_API_KEY in your Codespace environment variables)
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", "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"))
 
 # Configure paths for PyInstaller
 def get_base_path():
@@ -1035,6 +1040,57 @@ def settings():
         
     return render_template('settings.html', background_enabled=current_setting, mysql_config=mysql_config)
 
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    if not is_logged_in():
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.get_json()
+    user_message = data.get('message', '').strip()
+    
+    # Optional: Grab quick stats from the database to feed to the AI context
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM expenses WHERE user_id = %s", (session['user_id'],))
+    total_count = cursor.fetchone()[0]
+    conn.close()
+
+    try:
+        response = groq_client.chat.completions.create(
+            model="openai/gpt-oss-120b",  # Active Groq model ID
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are the AI Financial Assistant for 'Expense Tracker' by Verghese Keenalil.\n"
+                        "Your role is to analyze user expense data and provide personalized financial insights strictly "
+                        "within the capabilities of this application.\n\n"
+                        "APP FEATURES & ARCHITECTURE:\n"
+                        "- Security: User accounts with bcrypt password hashing; zero-knowledge AES-256 encrypted expenses "
+                        "derived via PBKDF2-HMAC-SHA256 key derivation; multi-user data isolation.\n"
+                        "- Expense Management: Add, view, edit, and delete expenses with custom categories. Amounts support "
+                        "up to 3 decimal places (ideal for precision currencies like BHD).\n"
+                        "- Database Backend: MySQL 5.7+.\n"
+                        "- Visual Analytics: Current month pie chart, period comparison bar chart, YTD totals, and multi-year "
+                        "monthly trend line chart. Time range filters: YTD, previous year, last 3/6/12 months, custom date ranges.\n\n"
+                        "STRICT LIMITATIONS (DO NOT RECOMMEND OR CLAIM THE APP SUPPORTS THESE):\n"
+                        "- NO automatic bank account, credit card, or financial sync (all entries are manual).\n"
+                        "- NO budget limits, spending thresholds, or automated overspending alerts.\n"
+                        "- NO receipt scanning, OCR, file uploads, or attachments.\n"
+                        "- NO multi-currency conversion or automated recurring expenses.\n\n"
+                        "FORMATTING INSTRUCTIONS:\n"
+                        "- Keep answers brief, friendly, practical, and clear.\n"
+                        "- Use standard Markdown formatting."
+                    ),
+                },
+                {"role": "user", "content": user_message},
+            ],
+        )
+        return jsonify({'reply': response.choices[0].message.content})
+    except Exception as e:
+        # Fallback to simple rule-based reply if internet/API fails during class!
+        return jsonify({'reply': "I'm having trouble reaching my AI backend, but I can still help you navigate the app!"})
+    
 # System Tray Functions
 def create_image():
     """Create a simple icon for the system tray"""

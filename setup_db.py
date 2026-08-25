@@ -52,6 +52,7 @@ def setup_database():
 
             # Create User and Grant Privileges
             cursor.execute(f"CREATE USER IF NOT EXISTS '{DB_USER}'@'localhost' IDENTIFIED BY '{DB_PASS}';")
+            cursor.execute(f"ALTER USER '{DB_USER}'@'localhost' IDENTIFIED BY '{DB_PASS}';")
             cursor.execute(f"GRANT ALL PRIVILEGES ON `{DB_NAME}`.* TO '{DB_USER}'@'localhost';")
             cursor.execute("FLUSH PRIVILEGES;")
             print(f"User '{DB_USER}' configured.")
