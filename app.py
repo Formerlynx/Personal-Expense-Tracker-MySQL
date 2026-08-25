@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
 
+# Import system tray dependencies
 try:
     import pystray
     from pystray import MenuItem as item
@@ -28,9 +29,10 @@ try:
     import tkinter as tk
     from tkinter import messagebox
     TRAY_AVAILABLE = True
-except (ImportError, Exception):
+except ImportError:
     TRAY_AVAILABLE = False
 
+# Configure paths for PyInstaller
 def get_base_path():
     """Get the base path for resources (works for both dev and frozen)"""
     if getattr(sys, 'frozen', False):
@@ -75,6 +77,7 @@ def save_settings(autostart_enable=None, mysql_config=None):
         except Exception as e:
             logger.error(f"Error reading settings for save: {e}")
 
+    # Update settings
     if autostart_enable is not None:
         current_settings['autostart'] = 'yes' if autostart_enable else 'no'
     current_settings['first_run_done'] = 'yes'
@@ -86,6 +89,7 @@ def save_settings(autostart_enable=None, mysql_config=None):
         current_settings['mysql_db'] = mysql_config.get('database', 'expense_tracker')
         current_settings['mysql_port'] = str(mysql_config.get('port', 3306))
         
+    # Write back to settings file
     try:
         with open(settings_file, 'w') as f:
             for k, v in current_settings.items():
@@ -114,6 +118,7 @@ def should_autostart():
 
 def get_mysql_config():
     """Retrieve MySQL connection settings from environment or settings.txt"""
+    # Default settings
     config = {
         'host': 'localhost',
         'user': 'root',
@@ -122,6 +127,7 @@ def get_mysql_config():
         'port': 3306
     }
     
+    # Read settings.txt if it exists
     settings_file = get_settings_file()
     if os.path.exists(settings_file):
         try:
@@ -148,6 +154,7 @@ def get_mysql_config():
         except Exception as e:
             logger.warning(f"Error reading settings.txt for MySQL config: {e}")
             
+    # Override with environment variables if present
     config['host'] = os.environ.get('MYSQL_HOST', config['host'])
     config['user'] = os.environ.get('MYSQL_USER', config['user'])
     config['password'] = os.environ.get('MYSQL_PASSWORD', config['password'])
@@ -166,7 +173,7 @@ def show_first_run_dialog():
         return True
     
     root = tk.Tk()
-    root.withdraw()
+    root.withdraw()  # Hide the main window
     
     result = messagebox.askyesno(
         "Expense Tracker - First Run",
@@ -181,6 +188,7 @@ def show_first_run_dialog():
     root.destroy()
     return result
 
+# Global variable for database connection status
 DB_CONNECTED = False
 
 def initialize_database():
@@ -203,6 +211,7 @@ def initialize_database():
     except mysql.connector.Error as e:
         logger.warning(f"Could not connect to MySQL server using primary settings: {e}")
         
+        # Try fallback combinations if hostname is localhost/127.0.0.1 and user is root
         if config['host'] in ('localhost', '127.0.0.1') and config['user'] == 'root':
             # Attempt 1: password 'tiger'
             logger.info("Attempting automatic database setup fallback: (localhost, port: default, root, password: tiger)")
@@ -304,7 +313,7 @@ def get_db_connection():
         DB_CONNECTED = False
         raise e
 
-
+# Encryption utilities
 class EncryptionManager:
     """Manages encryption and decryption of expense data using AES-256"""
     
@@ -344,25 +353,31 @@ static_folder = os.path.join(base_path, 'static')
 
 app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 
+# when frozen, serve dynamic static files (charts) from user data directory
 if getattr(sys, 'frozen', False):
     user_static_dir = os.path.join(get_user_data_path(), 'static')
     if not os.path.exists(user_static_dir):
         os.makedirs(user_static_dir)
+    # override flask's static folder so url_for('static') points here
     app.static_folder = user_static_dir
 
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
 bcrypt = Bcrypt(app)
 
+# Setup logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Error handler for debugging
 @app.errorhandler(Exception)
 def handle_exception(e):
     logger.error(f"Unhandled exception: {str(e)}", exc_info=True)
     return f"Error: {str(e)}", 500
 
+# Initialize database (at import time)
 initialize_database()
 
+# Global variable for system tray icon
 tray_icon = None
 
 def is_logged_in():
@@ -410,6 +425,7 @@ def db_setup():
             'port': int(request.form.get('mysql_port', '3306').strip() or '3306')
         }
         
+        # Test connection and initialize tables
         try:
             # First connect to server and create database if not exists
             conn = mysql.connector.connect(
@@ -422,6 +438,7 @@ def db_setup():
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{new_mysql_config['database']}`")
             conn.close()
             
+            # Save settings and reinitialize database tables
             save_settings(mysql_config=new_mysql_config)
             initialize_database()
             
@@ -433,6 +450,7 @@ def db_setup():
         except mysql.connector.Error as e:
             flash(f"Failed to connect to MySQL database: {str(e)}", "danger")
             
+        # Refresh config values for render
         mysql_config = new_mysql_config
             
     return render_template('db_setup.html', mysql_config=mysql_config)
@@ -585,6 +603,7 @@ def view_expenses():
             except:
                 amount_formatted = amount_str
             
+            # Parse date for sorting and grouping
             try:
                 parsed_date = datetime.strptime(date_str, "%d-%m-%Y")
                 year_month = parsed_date.strftime("%Y-%m")
@@ -648,43 +667,30 @@ def analyze_expenses():
     rows = cursor.fetchall()
     conn.close()
 
-    def decrypt_value(value):
-        decrypted = EncryptionManager.decrypt(value, encryption_key)
-        if decrypted == "[Decryption Failed]":
-            return None
-        return decrypted
-
     def parse_date(raw_date):
-        decrypted = decrypt_value(raw_date)
-        if decrypted is None:
-            return None
-        for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y"):
-            try:
-                return datetime.strptime(decrypted, fmt).date()
-            except ValueError:
-                continue
-        return None
-
-    decrypted_expenses = []
-    for category, amount, raw_date in rows:
-        category_value = decrypt_value(category)
-        amount_value = decrypt_value(amount)
-        parsed_date = parse_date(raw_date)
-        if not category_value or not amount_value or not parsed_date:
-            continue
         try:
-            decrypted_expenses.append({
-                'category': category_value,
-                'amount': float(amount_value),
-                'date': parsed_date,
-            })
-        except (TypeError, ValueError):
-            continue
+            # Decrypt the date first
+            decrypted = EncryptionManager.decrypt(raw_date, encryption_key)
+            for fmt in ("%d-%m-%Y", "%Y-%m-%d", "%d/%m/%Y"):
+                try:
+                    return datetime.strptime(decrypted, fmt).date()
+                except:
+                    continue
+            return None
+        except:
+            return None
 
+    # Decrypt and aggregate current month totals
     current_month_totals = defaultdict(float)
-    for expense in decrypted_expenses:
-        if first_of_month <= expense['date'] <= last_of_month:
-            current_month_totals[expense['category']] += expense['amount']
+    for row in rows:
+        try:
+            cat = EncryptionManager.decrypt(row[0], encryption_key)
+            amt = float(EncryptionManager.decrypt(row[1], encryption_key))
+            d = parse_date(row[2])
+            if d and first_of_month <= d <= last_of_month:
+                current_month_totals[cat] += amt
+        except:
+            continue
 
     pie_categories = list(current_month_totals.keys())
     pie_amounts = [current_month_totals[c] for c in pie_categories]
@@ -699,8 +705,6 @@ def analyze_expenses():
             if selected_range == 'custom' and start_date_arg and end_date_arg:
                 start_date = datetime.strptime(start_date_arg, "%Y-%m-%d").date()
                 end_date = datetime.strptime(end_date_arg, "%Y-%m-%d").date()
-                if start_date > end_date:
-                    start_date, end_date = end_date, start_date
             elif selected_range == 'previous_year':
                 start_date = today.replace(year=today.year - 1, month=1, day=1)
                 end_date = today.replace(year=today.year - 1, month=12, day=31)
@@ -715,15 +719,29 @@ def analyze_expenses():
             start_date = today.replace(month=1, day=1)
             end_date = today
 
+    # Aggregate totals for selected period
     totals = defaultdict(float)
     year_totals = defaultdict(float)
-    selected_expenses = []
-    for expense in decrypted_expenses:
-        if expense['date'].year == today.year:
-            year_totals[expense['category']] += expense['amount']
-        if start_date <= expense['date'] <= end_date:
-            totals[expense['category']] += expense['amount']
-            selected_expenses.append(expense)
+    totals_by_year = defaultdict(float)
+    
+    for row in rows:
+        try:
+            cat = EncryptionManager.decrypt(row[0], encryption_key)
+            amt = float(EncryptionManager.decrypt(row[1], encryption_key))
+            d = parse_date(row[2])
+            
+            if not d:
+                continue
+                
+            totals_by_year[d.year] += amt
+            
+            if d.year == today.year:
+                year_totals[cat] += amt
+            
+            if start_date <= d <= end_date:
+                totals[cat] += amt
+        except:
+            continue
 
     bar_categories = list(totals.keys())
     bar_amounts = [totals[c] for c in bar_categories]
@@ -732,6 +750,7 @@ def analyze_expenses():
     year_amounts = [year_totals[c] for c in year_categories]
 
     # Generate charts
+    # determine where to save charts; when running frozen use flask's static_folder
     if getattr(sys, 'frozen', False):
         static_path = app.static_folder
     else:
@@ -739,7 +758,7 @@ def analyze_expenses():
     
     if not os.path.exists(static_path):
         os.makedirs(static_path)
-
+    # remove stale images from previous analyses so cache tokens reflect fresh files
     for old in ('chart.png', 'bar_chart.png', 'yearly_trend.png'):
         try:
             os.remove(os.path.join(static_path, old))
@@ -789,8 +808,10 @@ def analyze_expenses():
 
     # Generate multi-year/month trend for the selected period
     try:
-        if selected_expenses:
+        # only build a trend if we actually have data at all
+        if totals_by_year:
             month_totals = defaultdict(float)
+            # base the range on the start/end dates the user chose
             start_month = start_date.replace(day=1)
             end_month = end_date.replace(day=1)
             
@@ -800,9 +821,15 @@ def analyze_expenses():
                 months.append(cur)
                 cur = (cur + relativedelta(months=1))
             
-            for expense in selected_expenses:
-                m_first = expense['date'].replace(day=1)
-                month_totals[m_first] += expense['amount']
+            for row in rows:
+                try:
+                    amt = float(EncryptionManager.decrypt(row[1], encryption_key))
+                    d = parse_date(row[2])
+                    if d and start_date <= d <= end_date:
+                        m_first = d.replace(day=1)
+                        month_totals[m_first] += amt
+                except:
+                    continue
             
             month_vals = [month_totals.get(m, 0.0) for m in months]
             labels = [m.strftime('%b %Y') for m in months]
@@ -828,6 +855,7 @@ def analyze_expenses():
     year_total = sum(year_amounts)
     year_highest = max(year_categories, key=lambda c: year_amounts[year_categories.index(c)]) if year_categories else None
 
+    # calculate cache-busting tokens based on file modification times
     def make_token(path):
         try:
             return str(int(os.path.getmtime(path)))
@@ -972,7 +1000,7 @@ def settings():
                 'database': request.form.get('mysql_db', 'expense_tracker').strip(),
                 'port': int(request.form.get('mysql_port', '3306').strip() or '3306')
             }
-
+            # Test connection
             try:
                 # First connect to server and create database if not exists
                 conn = mysql.connector.connect(
@@ -1010,6 +1038,7 @@ def settings():
 # System Tray Functions
 def create_image():
     """Create a simple icon for the system tray"""
+    # Create a 64x64 icon with a dollar sign
     image = Image.new('RGB', (64, 64), color=(0, 120, 215))
     dc = ImageDraw.Draw(image)
     dc.text((20, 15), "$", fill=(255, 255, 255), font=None)
@@ -1043,8 +1072,10 @@ def setup_system_tray():
     # Create tray icon
     tray_icon = pystray.Icon("ExpenseTracker", icon_image, "Expense Tracker", menu)
     
+    # Run in separate thread
     threading.Thread(target=tray_icon.run, daemon=True).start()
 
+# Flask server thread
 def run_flask():
     """Run Flask server"""
     app.run(debug=False, host='127.0.0.1', port=5000, use_reloader=False, threaded=True)
@@ -1075,25 +1106,29 @@ if __name__ == '__main__':
         else:
             enable_background = should_autostart()
         
+        # Start Flask in background thread
         flask_thread = threading.Thread(target=run_flask, daemon=True)
         flask_thread.start()
         
+        # Wait a moment for Flask to start
         import time
         time.sleep(2)
         
+        # Open browser
         webbrowser.open('http://127.0.0.1:5000')
         
         if enable_background:
             # Setup system tray and keep running
             if TRAY_AVAILABLE:
                 setup_system_tray()
+                # Keep main thread alive
                 while True:
                     time.sleep(1)
             else:
                 # No tray available, just keep Flask running
                 flask_thread.join()
         else:
-            # Don't run in background, wait for Flask
+            # Don't run in background, wait for Flask thread
             flask_thread.join()
     
     else:
