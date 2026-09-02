@@ -6,8 +6,8 @@ from bcrypt import hashpw, gensalt
 
 from app import EncryptionManager, get_db_connection
 
-DEMO_USERNAME = "demo_user"
-DEMO_PASSWORD = "DemoPassword123!"
+DEMO_USERNAME = "testuser"
+DEMO_PASSWORD = "test_pass"
 
 def seed_demo_data():
     conn = get_db_connection()
@@ -44,11 +44,13 @@ def seed_demo_data():
     }
 
     today = datetime.now()
+    start_of_year = datetime(today.year, 1, 1)
+    days_available = (today - start_of_year).days
     expenses_to_insert = []
 
     for _ in range(40):
-        days_ago = random.randint(1, 355)
-        expense_date = today - timedelta(days=days_ago)
+        days_since_start = random.randint(0, days_available)
+        expense_date = start_of_year + timedelta(days=days_since_start)
 
         category = random.choice(list(category_ranges.keys()))
         min_amt, max_amt = category_ranges[category]

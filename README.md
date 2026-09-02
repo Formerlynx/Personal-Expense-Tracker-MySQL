@@ -16,7 +16,7 @@ A comprehensive desktop application for tracking personal expenses with powerful
 
 > 👥 **Multi-User Ready**: Multiple people can use the app independently - everyone's data stays private and encrypted separately.
 
-> 🤖 **AI Assistant**: Powered by Groq's LLMs for personalized financial insights and advice.
+> 🤖 **AI Assistant**: Powered by Google AI Studio's Gemini models for personalized financial insights and advice.
 
 ---
 
@@ -71,7 +71,7 @@ A comprehensive desktop application for tracking personal expenses with powerful
 - 📱 **Responsive Layout** - Works on various screen sizes
 - ⚡ **Real-time Updates** - AJAX-powered delete operations
 - 🔒 **Session Management** - Secure user sessions with automatic logout
-- 🤖 **AI Chat Assistant** - Powered by Groq's LLMs for financial insights
+- 🤖 **AI Chat Assistant** - Powered by Google AI Studio's Gemini models for financial insights
 - 🖥️ **System Tray Integration** - Run app in background with quick access
 - ⚙️ **Settings Panel** - Configure MySQL connection, background mode, and preferences
 
@@ -99,7 +99,7 @@ Comprehensive visualization with:
 Configure MySQL connection and background mode preferences.
 
 ### AI Chat Assistant
-Chat interface powered by Groq's LLMs for financial insights.
+Chat interface powered by Google AI Studio's Gemini models for financial insights.
 
 ---
 
@@ -268,7 +268,7 @@ On first run, you'll need to configure your MySQL connection:
 - Click the **Chat** icon in the navigation
 - Ask questions about your spending habits
 - Get personalized financial insights
-- Powered by Groq's advanced LLMs
+- Powered by Google AI Studio's Gemini models
 - All queries are processed securely
 
 ### Settings & Preferences
@@ -356,7 +356,7 @@ Personal-Expense-Tracker-MySQL/
 - **cryptography 42.0.0** - AES-256 encryption for expense data
 - **matplotlib 3.8.2** - Chart generation
 - **python-dateutil** - Date calculations
-- **OpenAI Python Client** - Groq API integration for AI chat
+- **Google Gen AI Python SDK** - Google AI Studio integration for AI chat
 - **pystray** - System tray integration (Windows/Linux/macOS)
 
 ### Frontend
@@ -417,17 +417,18 @@ export MYSQL_PASSWORD=yourpassword
 export MYSQL_DB=expense_tracker
 export MYSQL_PORT=3306
 export FLASK_SECRET_KEY=your_secret_key
-export GROQ_API_KEY=your_groq_api_key
+export GOOGLE_API_KEY=your_google_ai_studio_key
 ```
 
-### Groq API Key Setup
+For a local school demonstration, you can instead create `google_api_key.txt` in the project folder and paste only the API key into that file. This file is ignored by Git and must be recreated when moving the project to another computer. The assistant uses the `gemini-3.6-flash` model.
 
-For AI chat features, obtain a Groq API key:
+### Google AI Studio API Key Setup
 
-1. Visit [Groq Console](https://console.groq.com)
+For AI chat features, obtain a Google AI Studio API key:
+
+1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
 2. Create an account and generate an API key
-3. Set environment variable: `GROQ_API_KEY=gsk_...`
-4. Or update in `app.py` (line 21)
+3. Set environment variable: `GOOGLE_API_KEY=...`
 
 ### Changing Flask Secret Key
 
@@ -540,9 +541,9 @@ python build_executable.py
 #### AI Chat Not Working
 **Problem**: Chat feature returns empty or error  
 **Solution**:
-- Verify Groq API key is set: `export GROQ_API_KEY=gsk_...`
+- Verify Google AI Studio API key is set: `export GOOGLE_API_KEY=...`
 - Check internet connection (required for API calls)
-- Ensure API key is valid at [Groq Console](https://console.groq.com)
+- Ensure API key is valid at [Google AI Studio](https://aistudio.google.com/apikey)
 - Check app console for error messages
 
 #### System Tray Not Appearing
@@ -683,7 +684,7 @@ SOFTWARE.
 - Bootstrap team for the UI framework
 - Matplotlib for visualization capabilities
 - MySQL database team
-- Groq for powerful LLM API
+- Google AI Studio for Gemini API access
 - cryptography library for security
 - pystray for system tray integration
 - Python community for excellent libraries

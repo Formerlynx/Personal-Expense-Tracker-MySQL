@@ -9,9 +9,9 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "pymysql"])
     import pymysql
 
-DB_NAME = "my_app_db"
-DB_USER = "app_user"
-DB_PASS = "SecurePassword123!"
+DB_NAME = "expense_tracker"
+DB_USER = "root"
+DB_PASS = "tiger"
 
 def ensure_mysql_installed():
     """Checks if MySQL service is installed; if not, installs and starts it."""
@@ -51,8 +51,14 @@ def setup_database():
             print(f"Database '{DB_NAME}' ensured.")
 
             # Create User and Grant Privileges
-            cursor.execute(f"CREATE USER IF NOT EXISTS '{DB_USER}'@'localhost' IDENTIFIED BY '{DB_PASS}';")
-            cursor.execute(f"ALTER USER '{DB_USER}'@'localhost' IDENTIFIED BY '{DB_PASS}';")
+            cursor.execute(
+                f"CREATE USER IF NOT EXISTS '{DB_USER}'@'localhost' "
+                f"IDENTIFIED WITH caching_sha2_password BY '{DB_PASS}';"
+            )
+            cursor.execute(
+                f"ALTER USER '{DB_USER}'@'localhost' "
+                f"IDENTIFIED WITH caching_sha2_password BY '{DB_PASS}';"
+            )
             cursor.execute(f"GRANT ALL PRIVILEGES ON `{DB_NAME}`.* TO '{DB_USER}'@'localhost';")
             cursor.execute("FLUSH PRIVILEGES;")
             print(f"User '{DB_USER}' configured.")

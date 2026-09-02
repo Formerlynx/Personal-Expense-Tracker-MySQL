@@ -20,7 +20,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.fernet import Fernet
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 # Import system tray dependencies
 try:
@@ -34,10 +35,20 @@ except Exception:
     TRAY_AVAILABLE = False
 
 
-# Initialize client (Set OPENAI_API_KEY in your Codespace environment variables)
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", "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"))
-
 # Configure paths for PyInstaller
+def get_google_api_key():
+    """Read the Gemini API key from the environment or a local ignored file."""
+    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+    if api_key:
+        return api_key
+
+    api_key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "google_api_key.txt")
+    try:
+        with open(api_key_file, "r", encoding="utf-8") as file:
+            return file.read().strip()
+    except OSError:
+        return ""
+
 def get_base_path():
     """Get the base path for resources (works for both dev and frozen)"""
     if getattr(sys, 'frozen', False):
@@ -591,11 +602,28 @@ def view_expenses():
     
     encryption_key = base64.b64decode(session['encryption_key'])
 
-    cursor.execute("SELECT id, expense_date, category, amount FROM expenses WHERE user_id = %s ORDER BY expense_date DESC", 
+    cursor.execute("SELECT id, expense_date, category, amount FROM expenses WHERE user_id = %s",
                    (session['user_id'],))
     rows = cursor.fetchall()
 
+    category_filter = request.args.get('category', '').strip()
+    start_date_arg = request.args.get('start_date', '').strip()
+    end_date_arg = request.args.get('end_date', '').strip()
+    sort_order = request.args.get('sort', 'desc').lower()
+    if sort_order not in ('asc', 'desc'):
+        sort_order = 'desc'
+
+    def parse_filter_date(value):
+        try:
+            return datetime.strptime(value, "%Y-%m-%d") if value else None
+        except ValueError:
+            return None
+
+    start_date = parse_filter_date(start_date_arg)
+    end_date = parse_filter_date(end_date_arg)
+
     expenses = []
+    categories = set()
     for row in rows:
         try:
             date_str = EncryptionManager.decrypt(row[1], encryption_key)
@@ -618,6 +646,16 @@ def view_expenses():
                 year_month = "Unknown"
                 display_date = date_str
             
+            if category_str:
+                categories.add(category_str)
+
+            if category_filter and category_str != category_filter:
+                continue
+            if start_date and (not parsed_date or parsed_date < start_date):
+                continue
+            if end_date and (not parsed_date or parsed_date > end_date):
+                continue
+
             expenses.append({
                 'id': row[0], 
                 'date': display_date, 
@@ -630,6 +668,14 @@ def view_expenses():
             continue
 
     conn.close()
+
+    expenses.sort(
+        key=lambda expense: (
+            expense['parsed_date'] is not None,
+            expense['parsed_date'] or datetime.min
+        ),
+        reverse=sort_order == 'desc'
+    )
     
     # Group expenses by year-month
     grouped_expenses = defaultdict(list)
@@ -637,9 +683,22 @@ def view_expenses():
         grouped_expenses[exp['year_month']].append(exp)
     
     # Sort groups by year-month descending
-    sorted_groups = sorted(grouped_expenses.items(), key=lambda x: x[0], reverse=True)
+    sorted_groups = sorted(
+        grouped_expenses.items(),
+        key=lambda item: item[0],
+        reverse=sort_order == 'desc'
+    )
     
-    return render_template('view.html', grouped_expenses=sorted_groups)
+    return render_template(
+        'view.html',
+        grouped_expenses=sorted_groups,
+        categories=sorted(categories),
+        category_filter=category_filter,
+        start_date_filter=start_date_arg,
+        end_date_filter=end_date_arg,
+        sort_order=sort_order,
+        total_expenses=len(expenses)
+    )
 
 @app.route('/analyze')
 def analyze_expenses():
@@ -1056,12 +1115,16 @@ def chat():
     conn.close()
 
     try:
-        response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-120b",  # Active Groq model ID
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
+        api_key = get_google_api_key()
+        if not api_key:
+            raise RuntimeError("Google AI Studio API key is not configured")
+
+        google_client = genai.Client(api_key=api_key)
+        response = google_client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=(
                         "You are the AI Financial Assistant for 'Expense Tracker' by Verghese Keenalil.\n"
                         "Your role is to analyze user expense data and provide personalized financial insights strictly "
                         "within the capabilities of this application.\n\n"
@@ -1082,13 +1145,11 @@ def chat():
                         "- Keep answers brief, friendly, practical, and clear.\n"
                         "- Use standard Markdown formatting."
                     ),
-                },
-                {"role": "user", "content": user_message},
-            ],
+            ),
         )
-        return jsonify({'reply': response.choices[0].message.content})
+        return jsonify({'reply': response.text})
     except Exception as e:
-        # Fallback to simple rule-based reply if internet/API fails during class!
+        logger.error("Google AI Studio request failed: %s", e)
         return jsonify({'reply': "I'm having trouble reaching my AI backend, but I can still help you navigate the app!"})
     
 # System Tray Functions
