@@ -235,6 +235,8 @@
 
                 appendMessage('User', text, '#0d6efd');
                 resetInputHeight();
+                sendBtn.disabled = true;
+                sendBtn.textContent = 'Thinking...';
 
                 try {
                     const res = await fetch('/api/chat', {
@@ -246,6 +248,9 @@
                     appendMessage('AI', data.reply || data.error, '#2b2b2b');
                 } catch (err) {
                     appendMessage('AI', 'Error connecting to backend.', '#dc3545');
+                } finally {
+                    sendBtn.disabled = false;
+                    sendBtn.textContent = 'Send';
                 }
             }
 

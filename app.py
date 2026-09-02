@@ -15,6 +15,9 @@ import secrets
 import threading
 import webbrowser
 import logging
+import csv
+import io
+import re
 from flask_bcrypt import Bcrypt
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -48,6 +51,19 @@ def get_google_api_key():
             return file.read().strip()
     except OSError:
         return ""
+
+_google_client = None
+_google_client_key = None
+
+def get_google_client(api_key):
+    global _google_client, _google_client_key
+    if _google_client is None or _google_client_key != api_key:
+        _google_client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=20000)
+        )
+        _google_client_key = api_key
+    return _google_client
 
 def get_base_path():
     """Get the base path for resources (works for both dev and frozen)"""
@@ -363,6 +379,68 @@ class EncryptionManager:
         except Exception:
             return "[Decryption Failed]"
 
+
+expense_text_cache = {}
+expense_cache_lock = threading.Lock()
+
+def load_user_expenses(user_id, encryption_key):
+    """Load and decrypt one user's expenses once for reuse by the AI assistant."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, expense_date, category, amount FROM expenses WHERE user_id = %s",
+        (user_id,)
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    expenses = []
+    for expense_id, expense_date, category, amount in rows:
+        expenses.append({
+            'id': expense_id,
+            'date': EncryptionManager.decrypt(expense_date, encryption_key),
+            'category': EncryptionManager.decrypt(category, encryption_key),
+            'amount': EncryptionManager.decrypt(amount, encryption_key)
+        })
+
+    with expense_cache_lock:
+        expense_text_cache[user_id] = create_expense_csv(expenses)
+    return expenses
+
+def create_expense_csv(expenses):
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=('date', 'category', 'amount'))
+    writer.writeheader()
+    writer.writerows(
+        {'date': expense['date'], 'category': expense['category'], 'amount': expense['amount']}
+        for expense in expenses
+    )
+    return output.getvalue()
+
+def get_cached_expense_text(user_id, encryption_key):
+    with expense_cache_lock:
+        cached_text = expense_text_cache.get(user_id)
+    if cached_text is None:
+        load_user_expenses(user_id, encryption_key)
+        with expense_cache_lock:
+            cached_text = expense_text_cache[user_id]
+    return cached_text
+
+def calculate_month_totals(expense_text):
+    monthly_totals = defaultdict(float)
+    for expense in csv.DictReader(io.StringIO(expense_text)):
+        try:
+            expense_date = datetime.strptime(expense['date'], "%d-%m-%Y")
+            monthly_totals[(expense_date.year, expense_date.month)] += float(expense['amount'])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return monthly_totals
+
+def invalidate_expense_cache(user_id):
+    with expense_cache_lock:
+        expense_text_cache.pop(user_id, None)
+
 base_path = get_base_path()
 template_folder = os.path.join(base_path, 'templates')
 static_folder = os.path.join(base_path, 'static')
@@ -519,6 +597,7 @@ def login():
             salt = base64.b64decode(user[2])
             encryption_key = EncryptionManager.derive_key(password, salt)
             session['encryption_key'] = base64.b64encode(encryption_key).decode()
+            load_user_expenses(user[0], encryption_key)
             
             flash("Logged in successfully!", "success")
             return redirect(url_for('index'))
@@ -584,6 +663,7 @@ def add_expense():
         )
         conn.commit()
         conn.close()
+        invalidate_expense_cache(session['user_id'])
 
         flash("Expense added successfully!", "success")
         return redirect(url_for('view_expenses'))
@@ -995,6 +1075,7 @@ def edit_expense(expense_id):
         )
         conn.commit()
         conn.close()
+        invalidate_expense_cache(session['user_id'])
 
         flash("Expense updated successfully!", "success")
         return redirect(url_for('view_expenses'))
@@ -1028,6 +1109,7 @@ def delete_expense(expense_id):
                    (expense_id, session['user_id']))
     conn.commit()
     conn.close()
+    invalidate_expense_cache(session['user_id'])
 
     return {"success": True}, 200
 
@@ -1107,27 +1189,55 @@ def chat():
     data = request.get_json()
     user_message = data.get('message', '').strip()
     
-    # Optional: Grab quick stats from the database to feed to the AI context
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM expenses WHERE user_id = %s", (session['user_id'],))
-    total_count = cursor.fetchone()[0]
-    conn.close()
+    encryption_key = base64.b64decode(session['encryption_key'])
+    expense_context = get_cached_expense_text(session['user_id'], encryption_key)
+    monthly_totals = calculate_month_totals(expense_context)
+
+    month_match = re.search(
+        r'\b(?:january|february|march|april|may|june|july|august|september|'
+        r'october|november|december)\b(?:\s+(?:of|,)?\s*(20\d{2}))?',
+        user_message,
+        re.IGNORECASE
+    )
+    asks_for_total = re.search(r'\b(?:how much|spent|spend|total)\b', user_message, re.IGNORECASE)
+    if month_match and asks_for_total:
+        month_number = datetime.strptime(month_match.group(0).split()[0], "%B").month
+        year = int(month_match.group(1)) if month_match.group(1) else datetime.now().year
+        total = monthly_totals[(year, month_number)]
+        month_name = datetime(year, month_number, 1).strftime("%B %Y")
+        return jsonify({'reply': f"You spent {total:.3f} BHD in {month_name}."})
+
+    monthly_summary = "\n".join(
+        f"{datetime(year, month, 1).strftime('%B %Y')}: {total:.3f} BHD"
+        for (year, month), total in sorted(monthly_totals.items())
+    ) or "No valid dated expenses available."
 
     try:
         api_key = get_google_api_key()
         if not api_key:
             raise RuntimeError("Google AI Studio API key is not configured")
 
-        google_client = genai.Client(api_key=api_key)
+        google_client = get_google_client(api_key)
         response = google_client.models.generate_content(
             model="gemini-3.6-flash",
-            contents=user_message,
+            contents=(
+                "USER EXPENSE DATA (use this data for personalized budgeting advice):\n"
+                f"{expense_context}\n\n"
+                "VERIFIED MONTHLY TOTALS:\n"
+                f"{monthly_summary}\n\n"
+                "USER MESSAGE:\n"
+                f"{user_message}"
+            ),
             config=types.GenerateContentConfig(
+                max_output_tokens=800,
                 system_instruction=(
                         "You are the AI Financial Assistant for 'Expense Tracker' by Verghese Keenalil.\n"
                         "Your role is to analyze user expense data and provide personalized financial insights strictly "
                         "within the capabilities of this application.\n\n"
+                        "Use the complete USER EXPENSE DATA provided with each request. When the user asks for budgeting "
+                        "help, identify spending patterns and propose a practical personalized plan based on their actual "
+                        "categories, dates, and amounts. Do not invent missing income or financial obligations; ask for "
+                        "those details when they are needed.\n\n"
                         "APP FEATURES & ARCHITECTURE:\n"
                         "- Security: User accounts with bcrypt password hashing; zero-knowledge AES-256 encrypted expenses "
                         "derived via PBKDF2-HMAC-SHA256 key derivation; multi-user data isolation.\n"
@@ -1147,7 +1257,8 @@ def chat():
                     ),
             ),
         )
-        return jsonify({'reply': response.text})
+        reply = response.text or "I could not generate a response. Please try asking again."
+        return jsonify({'reply': reply})
     except Exception as e:
         logger.error("Google AI Studio request failed: %s", e)
         return jsonify({'reply': "I'm having trouble reaching my AI backend, but I can still help you navigate the app!"})
