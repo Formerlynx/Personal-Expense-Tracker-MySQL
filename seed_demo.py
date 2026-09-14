@@ -6,8 +6,8 @@ from bcrypt import hashpw, gensalt
 
 from app import EncryptionManager, get_db_connection
 
-DEMO_USERNAME = "testuser"
-DEMO_PASSWORD = "test_pass"
+DEMO_USERNAME = "root"
+DEMO_PASSWORD = "root"
 
 def seed_demo_data():
     conn = get_db_connection()

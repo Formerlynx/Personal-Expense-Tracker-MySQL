@@ -1189,10 +1189,15 @@ def chat():
     data = request.get_json()
     user_message = data.get('message', '').strip()
     
+    # Initialize chat history in session if it doesn't exist
+    if 'chat_history' not in session:
+        session['chat_history'] = []
+    
     encryption_key = base64.b64decode(session['encryption_key'])
     expense_context = get_cached_expense_text(session['user_id'], encryption_key)
     monthly_totals = calculate_month_totals(expense_context)
 
+    # 1. Keep your hardcoded fast regex check for totals
     month_match = re.search(
         r'\b(?:january|february|march|april|may|june|july|august|september|'
         r'october|november|december)\b(?:\s+(?:of|,)?\s*(20\d{2}))?',
@@ -1203,10 +1208,11 @@ def chat():
     if month_match and asks_for_total:
         month_number = datetime.strptime(month_match.group(0).split()[0], "%B").month
         year = int(month_match.group(1)) if month_match.group(1) else datetime.now().year
-        total = monthly_totals[(year, month_number)]
+        total = monthly_totals.get((year, month_number), 0.0)
         month_name = datetime(year, month_number, 1).strftime("%B %Y")
         return jsonify({'reply': f"You spent {total:.3f} BHD in {month_name}."})
 
+    # 2. Build structural context
     monthly_summary = "\n".join(
         f"{datetime(year, month, 1).strftime('%B %Y')}: {total:.3f} BHD"
         for (year, month), total in sorted(monthly_totals.items())
@@ -1218,51 +1224,81 @@ def chat():
             raise RuntimeError("Google AI Studio API key is not configured")
 
         google_client = get_google_client(api_key)
-        response = google_client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=(
-                "USER EXPENSE DATA (use this data for personalized budgeting advice):\n"
-                f"{expense_context}\n\n"
-                "VERIFIED MONTHLY TOTALS:\n"
-                f"{monthly_summary}\n\n"
-                "USER MESSAGE:\n"
-                f"{user_message}"
-            ),
+
+        # 3. Format the active system instructions combined with dynamic data
+        system_instruction = (
+            "You are the AI Financial Assistant for 'Expense Tracker' by Verghese Keenalil.\n"
+            "Your role is to analyze user expense data and provide personalized financial insights strictly "
+            "within the capabilities of this application.\n\n"
+            "APP FEATURES & ARCHITECTURE:\n"
+            "- Security: User accounts with bcrypt password hashing; zero-knowledge AES-256 encrypted expenses "
+            "derived via PBKDF2-HMAC-SHA256 key derivation; multi-user data isolation.\n"
+            "- Expense Management: Add, view, edit, and delete expenses with custom categories. Amounts support "
+            "up to 3 decimal places (ideal for precision currencies like BHD).\n"
+            "- Database Backend: MySQL 5.7+.\n"
+            "- Visual Analytics: Current month pie chart, period comparison bar chart, YTD totals, and multi-year "
+            "monthly trend line chart.\n\n"
+            "STRICT LIMITATIONS:\n"
+            "- NO automatic bank/credit card sync, budget thresholds, receipt OCR, or multi-currency tools.\n\n"
+            "USER DATA CONTEXT:\n"
+            f"USER EXPENSE DATA:\n{expense_context}\n"
+            f"VERIFIED MONTHLY TOTALS:\n{monthly_summary}\n\n"
+            "FORMATTING INSTRUCTIONS:\n"
+            "- Keep answers brief, friendly, practical, and clear.\n"
+            "- Use standard Markdown formatting."
+        )
+
+        # 4. Construct the chat history object using standard SDK initializer types
+        sdk_history = []
+        for turn in session['chat_history']:
+            sdk_history.append(
+                types.Content(
+                    role=turn['role'], 
+                    parts=[types.Part(text=turn['text'])]  # FIXED: Direct object initialization
+                )
+            )
+
+        # Initialize the stateful Chat session with correct historical records
+        chat_session = google_client.chats.create(
+            model="gemini-3.6-flash",  # Ensure this free model tag matches
             config=types.GenerateContentConfig(
                 max_output_tokens=800,
-                system_instruction=(
-                        "You are the AI Financial Assistant for 'Expense Tracker' by Verghese Keenalil.\n"
-                        "Your role is to analyze user expense data and provide personalized financial insights strictly "
-                        "within the capabilities of this application.\n\n"
-                        "Use the complete USER EXPENSE DATA provided with each request. When the user asks for budgeting "
-                        "help, identify spending patterns and propose a practical personalized plan based on their actual "
-                        "categories, dates, and amounts. Do not invent missing income or financial obligations; ask for "
-                        "those details when they are needed.\n\n"
-                        "APP FEATURES & ARCHITECTURE:\n"
-                        "- Security: User accounts with bcrypt password hashing; zero-knowledge AES-256 encrypted expenses "
-                        "derived via PBKDF2-HMAC-SHA256 key derivation; multi-user data isolation.\n"
-                        "- Expense Management: Add, view, edit, and delete expenses with custom categories. Amounts support "
-                        "up to 3 decimal places (ideal for precision currencies like BHD).\n"
-                        "- Database Backend: MySQL 5.7+.\n"
-                        "- Visual Analytics: Current month pie chart, period comparison bar chart, YTD totals, and multi-year "
-                        "monthly trend line chart. Time range filters: YTD, previous year, last 3/6/12 months, custom date ranges.\n\n"
-                        "STRICT LIMITATIONS (DO NOT RECOMMEND OR CLAIM THE APP SUPPORTS THESE):\n"
-                        "- NO automatic bank account, credit card, or financial sync (all entries are manual).\n"
-                        "- NO budget limits, spending thresholds, or automated overspending alerts.\n"
-                        "- NO receipt scanning, OCR, file uploads, or attachments.\n"
-                        "- NO multi-currency conversion or automated recurring expenses.\n\n"
-                        "FORMATTING INSTRUCTIONS:\n"
-                        "- Keep answers brief, friendly, practical, and clear.\n"
-                        "- Use standard Markdown formatting."
-                    ),
+                system_instruction=system_instruction
             ),
+            history=sdk_history
         )
+
+        # Send the newest user message
+        response = chat_session.send_message(user_message)
         reply = response.text or "I could not generate a response. Please try asking again."
+
+        # 5. Save the updated conversation loop back to Flask Session
+        # Ensure we append strict lowercase keys matching the JavaScript triggers
+        local_history = session['chat_history']
+        local_history.append({'role': 'user', 'text': user_message})
+        local_history.append({'role': 'model', 'text': reply})
+        
+        if len(local_history) > 20:
+            local_history = local_history[-20:]
+        session['chat_history'] = local_history
+
         return jsonify({'reply': reply})
+
     except Exception as e:
+        # Change this line so you can see the real error in your terminal/command prompt:
+        print("!!! AI STUDIO ERROR DETAILS !!!:", str(e)) 
         logger.error("Google AI Studio request failed: %s", e)
         return jsonify({'reply': "I'm having trouble reaching my AI backend, but I can still help you navigate the app!"})
-    
+
+
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_chat():
+    if not is_logged_in():
+        return jsonify({'error': 'Unauthorized'}), 401
+    session.pop('chat_history', None)
+    return jsonify({'status': 'success', 'message': 'Chat history reset.'})
+
+
 # System Tray Functions
 def create_image():
     """Create a simple icon for the system tray"""

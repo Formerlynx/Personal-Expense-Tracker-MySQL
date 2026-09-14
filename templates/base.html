@@ -196,6 +196,7 @@
 
     {% if session.get('user_id') %}
         <script>
+            // Declare selectors to tie the script to your HTML elements
             const toggleNavBtn = document.getElementById('chat-toggle-nav');
             const closeBtn = document.getElementById('chat-close-btn');
             const chatPanel = document.getElementById('chat-panel');
@@ -203,26 +204,32 @@
             const chatInput = document.getElementById('chat-input');
             const chatMessages = document.getElementById('chat-messages');
 
+            // Navigation panel layout toggling helpers
             function toggleChat() {
                 chatPanel.classList.toggle('active');
+                if (chatPanel.classList.contains('active') && chatInput) {
+                    chatInput.focus();
+                }
             }
 
             if (toggleNavBtn) toggleNavBtn.addEventListener('click', toggleChat);
             if (closeBtn) closeBtn.addEventListener('click', toggleChat);
 
-            // Auto-expand textarea on typing
-            chatInput.addEventListener('input', function () {
-                this.style.height = 'auto';
-                this.style.height = (this.scrollHeight) + 'px';
-            });
+            // Auto-expand input box vertically as text lengths increase
+            if (chatInput) {
+                chatInput.addEventListener('input', function () {
+                    this.style.height = 'auto';
+                    this.style.height = (this.scrollHeight) + 'px';
+                });
 
-            // Key press listener: Enter sends message, Shift+Enter adds new line
-            chatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                }
-            });
+                // Keypress listener: Enter sends text, Shift+Enter moves to a new line
+                chatInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                    }
+                });
+            }
 
             function resetInputHeight() {
                 chatInput.value = '';
@@ -233,7 +240,8 @@
                 const text = chatInput.value.trim();
                 if (!text) return;
 
-                appendMessage('User', text, '#0d6efd');
+                // 1. Pass 'user' (lowercase) to match the SDK backend tracking key
+                appendMessage('user', text, '#0d6efd');
                 resetInputHeight();
                 sendBtn.disabled = true;
                 sendBtn.textContent = 'Thinking...';
@@ -245,9 +253,15 @@
                         body: JSON.stringify({ message: text })
                     });
                     const data = await res.json();
-                    appendMessage('AI', data.reply || data.error, '#2b2b2b');
+                
+                    // 2. Handle missing or error responses cleanly
+                    if (data.reply) {
+                        appendMessage('model', data.reply, '#2b2b2b');
+                    } else {
+                        appendMessage('model', data.error || 'An internal error occurred.', '#dc3545');
+                    }
                 } catch (err) {
-                    appendMessage('AI', 'Error connecting to backend.', '#dc3545');
+                    appendMessage('model', 'Error connecting to backend.', '#dc3545');
                 } finally {
                     sendBtn.disabled = false;
                     sendBtn.textContent = 'Send';
@@ -264,9 +278,12 @@
                 msgDiv.style.wordBreak = 'break-word';
                 msgDiv.style.height = 'auto';
                 msgDiv.style.fontSize = '0.9rem';
-                msgDiv.style.alignSelf = sender === 'User' ? 'flex-end' : 'flex-start';
                 
-                if (sender === 'AI') {
+                // 3. Align right for user, left for the model assistant bubble
+                msgDiv.style.alignSelf = sender === 'user' ? 'flex-end' : 'flex-start';
+                
+                // 4. Safely compile markdown strings coming from Gemini using marked.js
+                if (sender === 'model') {
                     msgDiv.innerHTML = marked.parse(text);
                 } else {
                     msgDiv.innerText = text;
@@ -276,10 +293,10 @@
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
 
-            sendBtn.addEventListener('click', sendMessage);
+            if (sendBtn) sendBtn.addEventListener('click', sendMessage);
         </script>
     {% endif %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://jsdelivr.net"></script>
 </body>
 </html>
