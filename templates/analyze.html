@@ -7,9 +7,9 @@
 ">
 
         
-        <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
+        <form method="GET" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
             <label for="range" style="font-weight: 500;">Time Range:</label>
-            <select name="range" id="range" class="form-control" style="width: auto;">
+            <select name="range" id="range" class="form-control" style="width: auto; min-width: 180px;">
                 <option value="ytd" {% if selected_range == 'ytd' %}selected{% endif %}>Year to date</option>
                 <option value="previous_year" {% if selected_range == 'previous_year' %}selected{% endif %}>Previous year</option>
                 <option value="3" {% if selected_range == '3' %}selected{% endif %}>Last 3 months</option>
@@ -18,7 +18,7 @@
                 <option value="custom" {% if selected_range == 'custom' %}selected{% endif %}>Custom range</option>
             </select>
 
-            <div id="custom-range" style="display: {% if selected_range == 'custom' %}flex{% else %}none{% endif %}; gap: 0.5rem; align-items: center;">
+            <div id="custom-range" style="display: {% if selected_range == 'custom' %}flex{% else %}none{% endif %}; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                 <label for="start_date" style="font-weight: 500; margin-left: .5rem;">From</label>
                 <input type="date" name="start_date" id="start_date" class="form-control" value="{% if selected_range == 'custom' %}{{ request.args.get('start_date','') }}{% endif %}">
                 <label for="end_date" style="font-weight: 500;">To</label>
@@ -58,6 +58,33 @@
             {% endif %}
         </div>
     </div>
+    <style>
+        @media (max-width: 768px) {
+            .card form[method="GET"] {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .card form[method="GET"] > label,
+            .card form[method="GET"] > select,
+            .card form[method="GET"] > #custom-range,
+            .card form[method="GET"] > button {
+                width: 100%;
+            }
+
+            #custom-range {
+                display: flex;
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            #custom-range input,
+            #range {
+                width: 100%;
+                min-width: 0;
+            }
+        }
+    </style>
     <script>
         // Show/hide custom range controls based on selection
         const rangeSelect = document.getElementById('range');
