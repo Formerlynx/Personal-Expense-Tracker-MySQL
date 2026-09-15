@@ -196,8 +196,39 @@ def get_mysql_config():
             config['port'] = int(os.environ['MYSQL_PORT'])
         except ValueError:
             pass
+
+    config['ssl_mode'] = os.environ.get('MYSQL_SSL_MODE', 'PREFERRED').upper()
+    config['ssl_ca'] = os.environ.get('MYSQL_SSL_CA', '').strip()
+    config['ssl_verify_cert'] = os.environ.get('MYSQL_SSL_VERIFY_CERT', 'false').lower() == 'true'
+    config['ssl_verify_identity'] = os.environ.get('MYSQL_SSL_VERIFY_IDENTITY', 'false').lower() == 'true'
             
     return config
+
+def get_mysql_connection(include_database=True, config=None):
+    """Create a MySQL connection with optional TLS settings."""
+    config = config or get_mysql_config()
+    connection_args = {
+        'host': config['host'],
+        'user': config['user'],
+        'password': config['password'],
+        'port': config['port']
+    }
+
+    if include_database:
+        connection_args['database'] = config['database']
+
+    if config.get('ssl_mode', 'PREFERRED') != 'DISABLED':
+        connection_args['ssl_disabled'] = False
+        if config.get('ssl_ca'):
+            connection_args['ssl_ca'] = config['ssl_ca']
+        if config.get('ssl_verify_cert'):
+            connection_args['ssl_verify_cert'] = True
+        if config.get('ssl_verify_identity'):
+            connection_args['ssl_verify_identity'] = True
+    else:
+        connection_args['ssl_disabled'] = True
+
+    return mysql.connector.connect(**connection_args)
 
 def show_first_run_dialog():
     """Show dialog on first run asking about background running"""
@@ -229,68 +260,8 @@ def initialize_database():
     """
     global DB_CONNECTED
     config = get_mysql_config()
-    db_name = config['database']
-    
-    # 1. Connect to MySQL server without database first to ensure database exists
-    conn = None
     try:
-        conn = mysql.connector.connect(
-            host=config['host'],
-            user=config['user'],
-            password=config['password'],
-            port=config['port']
-        )
-    except mysql.connector.Error as e:
-        logger.warning(f"Could not connect to MySQL server using primary settings: {e}")
-        
-        # Try fallback combinations if hostname is localhost/127.0.0.1 and user is root
-        if config['host'] in ('localhost', '127.0.0.1') and config['user'] == 'root':
-            # Attempt 1: password 'tiger'
-            logger.info("Attempting automatic database setup fallback: (localhost, port: default, root, password: tiger)")
-            try:
-                conn = mysql.connector.connect(
-                    host=config['host'],
-                    user=config['user'],
-                    password='tiger',
-                    port=config['port']
-                )
-                config['password'] = 'tiger'
-                save_settings(mysql_config=config)
-                logger.info("Successfully connected to MySQL using fallback password 'tiger'. Settings saved.")
-            except mysql.connector.Error as e_tiger:
-                # Attempt 2: password 'root'
-                logger.info("Attempting automatic database setup fallback: (localhost, port: default, root, password: root)")
-                try:
-                    conn = mysql.connector.connect(
-                        host=config['host'],
-                        user=config['user'],
-                        password='root',
-                        port=config['port']
-                    )
-                    config['password'] = 'root'
-                    save_settings(mysql_config=config)
-                    logger.info("Successfully connected to MySQL using fallback password 'root'. Settings saved.")
-                except mysql.connector.Error as e_root:
-                    logger.error(f"All database connection attempts and fallbacks failed. Errors: tiger: {e_tiger}, root: {e_root}")
-                    DB_CONNECTED = False
-                    return
-        else:
-            DB_CONNECTED = False
-            return
-
-    try:
-        cursor = conn.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}`")
-        conn.close()
-        logger.info(f"Database '{db_name}' initialized/verified.")
-    except mysql.connector.Error as e:
-        logger.error(f"Could not create database '{db_name}': {e}")
-        DB_CONNECTED = False
-        return
-        
-    # 2. Connect to the database and create tables if they do not exist
-    try:
-        conn = get_db_connection_no_check()
+        conn = get_mysql_connection()
         cursor = conn.cursor()
         
         # Create users table
@@ -324,15 +295,7 @@ def initialize_database():
         DB_CONNECTED = False
 
 def get_db_connection_no_check():
-    config = get_mysql_config()
-    conn = mysql.connector.connect(
-        host=config['host'],
-        user=config['user'],
-        password=config['password'],
-        database=config['database'],
-        port=config['port']
-    )
-    return conn
+    return get_mysql_connection()
 
 def get_db_connection():
     global DB_CONNECTED
@@ -521,17 +484,8 @@ def db_setup():
         
         # Test connection and initialize tables
         try:
-            # First connect to server and create database if not exists
-            conn = mysql.connector.connect(
-                host=new_mysql_config['host'],
-                user=new_mysql_config['user'],
-                password=new_mysql_config['password'],
-                port=new_mysql_config['port']
-            )
-            cursor = conn.cursor()
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{new_mysql_config['database']}`")
-            conn.close()
-            
+            get_mysql_connection(config=new_mysql_config).close()
+
             # Save settings and reinitialize database tables
             save_settings(mysql_config=new_mysql_config)
             initialize_database()
@@ -1148,26 +1102,7 @@ def settings():
             }
             # Test connection
             try:
-                # First connect to server and create database if not exists
-                conn = mysql.connector.connect(
-                    host=new_mysql_config['host'],
-                    user=new_mysql_config['user'],
-                    password=new_mysql_config['password'],
-                    port=new_mysql_config['port']
-                )
-                cursor = conn.cursor()
-                cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{new_mysql_config['database']}`")
-                conn.close()
-                
-                # Now try to connect to the specific db
-                conn = mysql.connector.connect(
-                    host=new_mysql_config['host'],
-                    user=new_mysql_config['user'],
-                    password=new_mysql_config['password'],
-                    database=new_mysql_config['database'],
-                    port=new_mysql_config['port']
-                )
-                conn.close()
+                get_mysql_connection(config=new_mysql_config).close()
                 
                 # Save settings and reinitialize database tables
                 save_settings(mysql_config=new_mysql_config)
@@ -1342,7 +1277,13 @@ def setup_system_tray():
 # Flask server thread
 def run_flask():
     """Run Flask server"""
-    app.run(debug=False, host='127.0.0.1', port=5000, use_reloader=False, threaded=True)
+    app.run(
+        debug=False,
+        host='0.0.0.0',
+        port=int(os.environ.get('PORT', '5000')),
+        use_reloader=False,
+        threaded=True
+    )
 
 if __name__ == '__main__':
     # Running as executable

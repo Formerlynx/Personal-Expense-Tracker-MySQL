@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: personal-expense-tracker
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
+        value: "22833"
+      - key: MYSQL_USER
+        value: avnadmin
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DB
+        value: defaultdb
+      - key: MYSQL_SSL_MODE
+        value: REQUIRED
+      - key: MYSQL_SSL_CA
+        value: /etc/secrets/aiven-ca.pem
+      - key: MYSQL_SSL_VERIFY_CERT
+        value: "true"
+      - key: MYSQL_SSL_VERIFY_IDENTITY
+        value: "true"
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
