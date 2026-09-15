@@ -131,6 +131,17 @@
         gap: 0.5rem;
         flex-wrap: wrap;
     }
+
+    @media (max-width: 768px) {
+        .expense-filters {
+            grid-template-columns: 1fr;
+        }
+
+        .expense-filter-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 
 <script>
