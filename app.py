@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from sqlalchemy import text
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -424,6 +425,16 @@ bcrypt = Bcrypt(app)
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+@app.route('/health-check', methods=['GET'])
+def db_keep_alive():
+    try:
+        # A tiny read command to signal user activity to Aiven
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1;"))
+        return jsonify({"status": "active", "msg": "Database is kept awake!"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # Error handler for debugging
 @app.errorhandler(Exception)
