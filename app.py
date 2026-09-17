@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
-from sqlalchemy import text
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -425,20 +424,6 @@ bcrypt = Bcrypt(app)
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
-
-@app.route('/health-check', methods=['GET'])
-def health_check():
-    try:
-        # 1. Execute a tiny query to keep Aiven awake
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1;"))
-        
-        # 2. Return an empty string with HTTP 200 (Uses practically zero bandwidth)
-        return Response("", status=200)
-        
-    except Exception as e:
-        # 3. Even on error, return a generic 1-word status to avoid large logs blowing up limits
-        return Response("Error", status=500)
 
 # Error handler for debugging
 @app.errorhandler(Exception)
